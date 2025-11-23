@@ -296,7 +296,7 @@
   (println (core/color :bright-green "\n"))
   (println (core/color :bright-green "╔═══════════════════════════════════════════════════╗"))
   (println (core/color :bright-green "║                                                   ║"))
-  (println (core/color :bright-green "║      POORICH MARKDOWN COMPONENT SHOWCASE          ║"))
+  (println (core/color :bright-green "║      LIMNER MARKDOWN COMPONENT SHOWCASE           ║"))
   (println (core/color :bright-green "║                                                   ║"))
   (println (core/color :bright-green "╚═══════════════════════════════════════════════════╝"))
 

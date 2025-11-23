@@ -233,7 +233,7 @@
   (println (core/color :bright-green "\n"))
   (println (core/color :bright-green "╔═══════════════════════════════════════════════════╗"))
   (println (core/color :bright-green "║                                                   ║"))
-  (println (core/color :bright-green "║        POORICH PANEL COMPONENT SHOWCASE           ║"))
+  (println (core/color :bright-green "║        LIMNER PANEL COMPONENT SHOWCASE            ║"))
   (println (core/color :bright-green "║                                                   ║"))
   (println (core/color :bright-green "╚═══════════════════════════════════════════════════╝"))
 

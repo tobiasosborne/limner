@@ -435,7 +435,7 @@
   (println (core/color :bright-green "\n"))
   (println (core/color :bright-green "╔═══════════════════════════════════════════════════╗"))
   (println (core/color :bright-green "║                                                   ║"))
-  (println (core/color :bright-green "║        POORICH LIST COMPONENT SHOWCASE            ║"))
+  (println (core/color :bright-green "║        LIMNER LIST COMPONENT SHOWCASE             ║"))
   (println (core/color :bright-green "║                                                   ║"))
   (println (core/color :bright-green "╚═══════════════════════════════════════════════════╝"))
 

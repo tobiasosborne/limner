@@ -204,7 +204,7 @@
   (println (core/color :bright-green "\n"))
   (println (core/color :bright-green "╔═══════════════════════════════════════════════════╗"))
   (println (core/color :bright-green "║                                                   ║"))
-  (println (core/color :bright-green "║        POORICH BORDER STYLES SHOWCASE             ║"))
+  (println (core/color :bright-green "║        LIMNER BORDER STYLES SHOWCASE              ║"))
   (println (core/color :bright-green "║                                                   ║"))
   (println (core/color :bright-green "╚═══════════════════════════════════════════════════╝"))
 

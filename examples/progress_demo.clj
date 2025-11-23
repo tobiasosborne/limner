@@ -174,7 +174,7 @@
 (defn -main [& args]
   (clear-screen)
   (println (core/color :bright-green "╔═══════════════════════════════════════════╗"))
-  (println (core/color :bright-green "║   Poorich Progress Components Demo       ║"))
+  (println (core/color :bright-green "║   Limner Progress Components Demo        ║"))
   (println (core/color :bright-green "╚═══════════════════════════════════════════╝"))
 
   (demo-spinners)

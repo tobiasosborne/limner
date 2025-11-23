@@ -421,7 +421,7 @@
   (println (core/color :bright-green "\n"))
   (println (core/color :bright-green "╔═══════════════════════════════════════════════════╗"))
   (println (core/color :bright-green "║                                                   ║"))
-  (println (core/color :bright-green "║        POORICH INPUT COMPONENT SHOWCASE           ║"))
+  (println (core/color :bright-green "║        LIMNER INPUT COMPONENT SHOWCASE            ║"))
   (println (core/color :bright-green "║                                                   ║"))
   (println (core/color :bright-green "╚═══════════════════════════════════════════════════╝"))
 
