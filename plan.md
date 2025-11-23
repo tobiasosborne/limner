@@ -1,7 +1,7 @@
 # Limner TUI - Modular Architecture Plan
 
 ## Overview
-Refactor limner.clj into a modular TUI library that recreates Claude Code CLI graphics with composable components.
+A clojure/babaschka native modular TUI library with CLI graphics with composable components.
 
 ## Module Structure
 

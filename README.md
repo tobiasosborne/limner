@@ -282,7 +282,7 @@ Contributions are welcome! Please:
 
 ## License
 
-[Choose your license - MIT, EPL, etc.]
+MIT
 
 ## Acknowledgments
 
