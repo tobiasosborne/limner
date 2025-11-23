@@ -1,0 +1,69 @@
+# Leiningen
+target/
+classes/
+checkpoints/
+*.jar
+*.class
+.lein-*
+.nrepl-*
+pom.xml
+pom.xml.asc
+
+# REPL
+.cpcache/
+.rebel_readline_history
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.calva/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Build
+*.log
+
+# Custom tools (users create these)
+~/.polyceph/
+
+# ──────────────────────────────────────────────────────
+# Emacs temporary / backup files
+# ──────────────────────────────────────────────────────
+
+# 1. Simple backup files: foo.clj~
+*~
+
+# 2. Auto‑save files: #foo.clj#
+#*#
+
+# 3. Lock files: .#foo.clj
+.#*
+
+# 4. Auto‑save list directory (if Emacs stores it inside the repo)
+auto-save-list/
+
+# 5. Optional: a dedicated backup directory you might configure
+# *.bak/          # <-- uncomment if you use `backup-directory-alist` with *.bak
+
+# ──────────────────────────────────────────────────────
+# Common Clojure / Leiningen / Clojure CLI artefacts
+# ──────────────────────────────────────────────────────
+
+# Leiningen target directory
+target/
+
+# Class files compiled by tools.jar / Clojure compiler
+*.class
+
+# Optional: compiled jar artifacts
+*.jar
+
+# ──────────────────────────────────────────────────────
+# End of file
