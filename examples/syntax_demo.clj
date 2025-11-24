@@ -68,7 +68,7 @@ const user = new User('Alice', 30);
 user.greet();")
 
 (defn demo-clojure []
-  (println "\n" (str/join "" (repeat 70 "═")))
+  (println (str "\n" (str/join "" (repeat 70 "═"))))
   (println "  Clojure Syntax Highlighting")
   (println (str/join "" (repeat 70 "═")))
   (println)
@@ -76,7 +76,7 @@ user.greet();")
   (println))
 
 (defn demo-python []
-  (println "\n" (str/join "" (repeat 70 "═")))
+  (println (str "\n" (str/join "" (repeat 70 "═"))))
   (println "  Python Syntax Highlighting")
   (println (str/join "" (repeat 70 "═")))
   (println)
@@ -84,7 +84,7 @@ user.greet();")
   (println))
 
 (defn demo-javascript []
-  (println "\n" (str/join "" (repeat 70 "═")))
+  (println (str "\n" (str/join "" (repeat 70 "═"))))
   (println "  JavaScript Syntax Highlighting")
   (println (str/join "" (repeat 70 "═")))
   (println)
@@ -92,7 +92,7 @@ user.greet();")
   (println))
 
 (defn demo-themes []
-  (println "\n" (str/join "" (repeat 70 "═")))
+  (println (str "\n" (str/join "" (repeat 70 "═"))))
   (println "  Different Themes")
   (println (str/join "" (repeat 70 "═")))
   (println)
@@ -111,7 +111,7 @@ user.greet();")
     (println)))
 
 (defn demo-line-numbers []
-  (println "\n" (str/join "" (repeat 70 "═")))
+  (println (str "\n" (str/join "" (repeat 70 "═"))))
   (println "  With Line Numbers")
   (println (str/join "" (repeat 70 "═")))
   (println)
@@ -121,7 +121,7 @@ user.greet();")
     (println)))
 
 (defn demo-language-detection []
-  (println "\n" (str/join "" (repeat 70 "═")))
+  (println (str "\n" (str/join "" (repeat 70 "═"))))
   (println "  Language Detection")
   (println (str/join "" (repeat 70 "═")))
   (println)
@@ -139,7 +139,7 @@ user.greet();")
   (println))
 
 (defn demo-tokenization []
-  (println "\n" (str/join "" (repeat 70 "═")))
+  (println (str "\n" (str/join "" (repeat 70 "═"))))
   (println "  Tokenization")
   (println (str/join "" (repeat 70 "═")))
   (println)
@@ -153,7 +153,7 @@ user.greet();")
     (println)))
 
 (defn demo-comparison []
-  (println "\n" (str/join "" (repeat 70 "═")))
+  (println (str "\n" (str/join "" (repeat 70 "═"))))
   (println "  Before and After")
   (println (str/join "" (repeat 70 "═")))
   (println)
@@ -172,7 +172,7 @@ user.greet();")
     (println)))
 
 (defn demo-complex-code []
-  (println "\n" (str/join "" (repeat 70 "═")))
+  (println (str "\n" (str/join "" (repeat 70 "═"))))
   (println "  Complex Code Example")
   (println (str/join "" (repeat 70 "═")))
   (println)
@@ -197,7 +197,7 @@ user.greet();")
 (defn -main []
   (println)
   (println "╔════════════════════════════════════════════════════════════════════╗")
-  (println "║         Limner Syntax Highlighting Demo                           ║")
+  (println "║         Limner Syntax Highlighting Demo                            ║")
   (println "╚════════════════════════════════════════════════════════════════════╝")
 
   (demo-comparison)
@@ -210,8 +210,8 @@ user.greet();")
   (demo-language-detection)
   (demo-complex-code)
 
-  (println "\n" (str/join "" (repeat 70 "═")))
-  (println "  Available themes:" (str/join ", " (map name (syntax/available-themes))))
+  (println (str "\n" (str/join "" (repeat 70 "═"))))
+  (println (str "  Available themes: " (str/join ", " (map name (syntax/available-themes)))))
   (println (str/join "" (repeat 70 "═")))
   (println "\nDemo complete!"))
 
