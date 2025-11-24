@@ -117,7 +117,7 @@ A clojure/babaschka native modular TUI library with CLI graphics with composable
 - Custom spinner frames and progress bar characters fully supported
 - Components integrate seamlessly with panels for complex layouts
 
-### 9. `components/statusbar.clj` - Status Line
+### 9. `components/statusbar.clj` - Status Line -> Completed!
 **Responsibility:** Bottom status bar like Claude Code
 - Left/center/right sections
 - Git branch, file info, timestamps
@@ -129,7 +129,7 @@ A clojure/babaschka native modular TUI library with CLI graphics with composable
 - Overflow truncates gracefully
 - Dynamic updates don't flicker
 
-### 10. `syntax.clj` - Syntax Highlighting
+### 10. `syntax.clj` - Syntax Highlighting 
 **Responsibility:** Language-aware code coloring (expand existing)
 - Pluggable language rules (Clojure, Python, JavaScript, etc.)
 - Token-based highlighting (keywords, strings, comments, functions)
