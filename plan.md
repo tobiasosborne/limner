@@ -129,7 +129,7 @@ A clojure/babaschka native modular TUI library with CLI graphics with composable
 - Overflow truncates gracefully
 - Dynamic updates don't flicker
 
-### 10. `syntax.clj` - Syntax Highlighting 
+### 10. `syntax.clj` - Syntax Highlighting -> Completed!
 **Responsibility:** Language-aware code coloring (expand existing)
 - Pluggable language rules (Clojure, Python, JavaScript, etc.)
 - Token-based highlighting (keywords, strings, comments, functions)
