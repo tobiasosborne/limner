@@ -141,7 +141,7 @@ A clojure/babaschka native modular TUI library with CLI graphics with composable
 - JavaScript: template literals, arrow functions
 - Nested string escapes
 
-### 11. `streaming.clj` - Streaming Text
+### 11. `streaming.clj` - Streaming Text -> Completed!
 **Responsibility:** Character-by-character text display
 - Stream text with controlled delay
 - Cancel/pause/resume streaming
@@ -153,6 +153,19 @@ A clojure/babaschka native modular TUI library with CLI graphics with composable
 - Cancel stops at correct position
 - Syntax applied incrementally
 - No flicker during updates
+
+**Implementation Notes:**
+- Component-based architecture with state machine (:pending, :streaming, :paused, :cancelled, :completed)
+- Time-based character advancement using `delay-ms` parameter (default 30ms)
+- Full pause/resume/cancel/reset controls with state preservation
+- Incremental syntax highlighting applies to visible text only
+- Cursor blink effect uses time-based frame calculation (configurable blink interval)
+- Progress tracking with percentage and remaining character count
+- Supports all language syntax highlighters (:clojure, :python, :javascript)
+- `tick` function handles both text advancement and cursor animation
+- Direct position setting for seeking within stream
+- Helper function for instant completion (useful for testing)
+- Zero flicker - only renders currently visible portion of text
 
 ### 12. `events.clj` - Event System
 **Responsibility:** Keyboard/mouse input handling
