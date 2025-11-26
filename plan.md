@@ -167,7 +167,7 @@ A clojure/babaschka native modular TUI library with CLI graphics with composable
 - Helper function for instant completion (useful for testing)
 - Zero flicker - only renders currently visible portion of text
 
-### 12. `events.clj` - Event System
+### 12. `events.clj` - Event System -> Completed!
 **Responsibility:** Keyboard/mouse input handling
 - Key event parsing (including modifiers)
 - Event routing to focused component
@@ -179,6 +179,20 @@ A clojure/babaschka native modular TUI library with CLI graphics with composable
 - Focus cycles through interactive elements
 - Keybindings dispatch correct handlers
 - Mouse click coordinates map to components
+
+**Implementation Notes:**
+- Comprehensive key parsing for regular chars, control sequences, arrows, function keys, and mouse events
+- Support for SGR and normal mouse event formats (left/middle/right click, scroll, press/release)
+- Key combo creation and matching with modifier support (Ctrl, Alt, Shift)
+- Dynamic keybinding registry with bind/unbind/dispatch capabilities
+- Focus state management with circular tab order and wrap-around support
+- Component add/remove with automatic focus handling
+- Event routing to focused components with handler delegation
+- Mouse event routing based on component layout coordinates with local coordinate translation
+- Built-in Tab/Shift+Tab navigation support
+- High-level `process-event` function for complete event loop integration
+- All event handlers receive (event state) and return updated state
+- Zero dependencies beyond core Clojure - pure functional implementation
 
 ### 13. `render.clj` - Render Loop
 **Responsibility:** Efficient screen updates
