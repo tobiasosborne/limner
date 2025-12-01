@@ -87,8 +87,8 @@
 (defn show-char-width [label char-str expected]
   (let [actual (core/visible-width char-str)
         status (if (= actual expected)
-                 (core/color :green "✓")
-                 (core/color :red "✗"))]
+                 (core/color :green "OK")
+                 (core/color :red "ERR"))]
     (println (format "  %s %-25s width=%d (expected %d)  %s"
                      status
                      (str label ":")

@@ -185,20 +185,26 @@
     (is (= 4 (core/visible-width (core/color :red "日本"))))))
 
 (deftest test-visible-width-emoji
-  (testing "Common emoji (width 2)"
+  (testing "True emoji (width 2)"
     (is (= 2 (core/visible-width "😀")))
     (is (= 2 (core/visible-width "🎉")))
-    (is (= 2 (core/visible-width "❤")))
-    (is (= 2 (core/visible-width "✓"))))
+    (is (= 2 (core/visible-width "🎈")))
+    (is (= 2 (core/visible-width "🚀"))))
+
+  (testing "Symbol characters (width 1, not emoji)"
+    (is (= 1 (core/visible-width "✓")))
+    (is (= 1 (core/visible-width "✗")))
+    (is (= 1 (core/visible-width "⚠")))
+    (is (= 1 (core/visible-width "❤"))))
 
   (testing "Multiple emoji"
-    (is (= 6 (core/visible-width "😀🎉❤"))))
+    (is (= 6 (core/visible-width "😀🎉🎈"))))
 
   (testing "Emoji with ASCII"
-    (is (= 7 (core/visible-width "Test 😀"))))  ; 5 + 2 = 7
+    (is (= 7 (core/visible-width "Test 😀"))))  ; 4 + 1 + 2 = 7
 
-  (testing "Emoji with ANSI colors"
-    (is (= 2 (core/visible-width (core/color :green "✓"))))))
+  (testing "Symbols with ANSI colors"
+    (is (= 1 (core/visible-width (core/color :green "✓"))))))
 
 (deftest test-visible-width-combining
   (testing "Combining diacritical marks (width 0)"
@@ -265,15 +271,18 @@
 
 (deftest test-visible-width-practical
   (testing "Practical UI examples"
-    ;; Status indicators with emoji
-    (is (= 9 (core/visible-width "✓ Passed")))  ; 2 + 7 = 9
-    (is (= 9 (core/visible-width "✗ Failed")))  ; 2 + 7 = 9
+    ;; Status indicators with symbols (width 1 each)
+    (is (= 8 (core/visible-width "✓ Passed")))  ; 1 + 1 + 6 = 8
+    (is (= 8 (core/visible-width "✗ Failed")))  ; 1 + 1 + 6 = 8
 
     ;; Mixed content
     (is (= 18 (core/visible-width "User: 张三 (Admin)")))  ; 6 + 4 + 8 = 18
 
-    ;; Progress indicators
-    (is (= 6 (core/visible-width "█████░")))))  ; 6 blocks × 1 = 6... wait, these might be fullwidth
+    ;; Progress indicators (block elements are width 1)
+    (is (= 6 (core/visible-width "█████░")))
+
+    ;; Real emoji with text
+    (is (= 13 (core/visible-width "✓ Success! 🎉")))))
 
 ;; ──────────────────────── Edge Cases ──────────────────────
 

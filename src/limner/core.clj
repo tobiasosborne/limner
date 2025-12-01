@@ -269,12 +269,12 @@
 
       ;; Emoji presentation characters (most common range)
       ;; Note: This is simplified; full emoji support requires checking
-      ;; Unicode emoji data and handling ZWJ sequences
-      (or (and (>= cp 0x1F300) (<= cp 0x1F9FF))
-          (and (>= cp 0x1F600) (<= cp 0x1F64F))
-          (and (>= cp 0x1F680) (<= cp 0x1F6FF))
-          (and (>= cp 0x2600) (<= cp 0x26FF))
-          (and (>= cp 0x2700) (<= cp 0x27BF)))
+      ;; Unicode emoji data and handling variation selectors
+      ;; Most true emoji are in the 0x1F000+ range
+      (or (and (>= cp 0x1F300) (<= cp 0x1F9FF))   ; Misc Symbols and Pictographs
+          (and (>= cp 0x1F000) (<= cp 0x1F02F))   ; Mahjong Tiles
+          (and (>= cp 0x1F0A0) (<= cp 0x1F0FF))   ; Playing Cards
+          (and (>= cp 0x1F100) (<= cp 0x1F2FF)))  ; Enclosed Alphanumeric Supplement
       2
 
       ;; Default: narrow character (width 1)
