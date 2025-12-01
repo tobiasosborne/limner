@@ -129,7 +129,7 @@
     (is (= :yellow (core/colors :warning)))
     (is (= :cyan (core/colors :info)))))
 
-;; ──────────────────────── Visible Length Tests ──────────────────────
+;; ──────────────────────── Visible Length Tests (Legacy) ──────────────────────
 
 (deftest test-visible-length
   (testing "Plain strings"
@@ -147,6 +147,133 @@
 
   (testing "String with only ANSI codes"
     (is (= 0 (core/visible-length "\u001B[31m\u001B[0m")))))
+
+;; ──────────────────────── Unicode Width Tests ──────────────────────
+
+(deftest test-visible-width-ascii
+  (testing "Plain ASCII strings"
+    (is (= 5 (core/visible-width "Hello")))
+    (is (= 13 (core/visible-width "Hello, World!")))
+    (is (= 0 (core/visible-width ""))))
+
+  (testing "ASCII with ANSI codes"
+    (is (= 5 (core/visible-width (core/color :red "Hello"))))
+    (is (= 11 (core/visible-width (core/color :blue "Hello World")))))
+
+  (testing "Nested ANSI codes"
+    (is (= 8 (core/visible-width (core/color :bold (core/color :red "Bold Red")))))))
+
+(deftest test-visible-width-cjk
+  (testing "Chinese characters (width 2 each)"
+    (is (= 6 (core/visible-width "你好世")))  ; 3 chars × 2 = 6
+    (is (= 4 (core/visible-width "日本"))))    ; 2 chars × 2 = 4
+
+  (testing "Japanese Hiragana (width 2 each)"
+    (is (= 10 (core/visible-width "こんにちは"))))  ; 5 chars × 2 = 10
+
+  (testing "Japanese Katakana (width 2 each)"
+    (is (= 8 (core/visible-width "カタカナ"))))  ; 4 chars × 2 = 8
+
+  (testing "Korean Hangul syllables (width 2 each)"
+    (is (= 10 (core/visible-width "안녕하세요"))))  ; 5 chars × 2 = 10
+
+  (testing "Mixed ASCII and CJK"
+    (is (= 9 (core/visible-width "Hello你好")))  ; 5 + 4 = 9
+    (is (= 10 (core/visible-width "Test日本語"))))  ; 4 + 6 = 10
+
+  (testing "CJK with ANSI colors"
+    (is (= 4 (core/visible-width (core/color :red "日本"))))))
+
+(deftest test-visible-width-emoji
+  (testing "Common emoji (width 2)"
+    (is (= 2 (core/visible-width "😀")))
+    (is (= 2 (core/visible-width "🎉")))
+    (is (= 2 (core/visible-width "❤")))
+    (is (= 2 (core/visible-width "✓"))))
+
+  (testing "Multiple emoji"
+    (is (= 6 (core/visible-width "😀🎉❤"))))
+
+  (testing "Emoji with ASCII"
+    (is (= 7 (core/visible-width "Test 😀"))))  ; 5 + 2 = 7
+
+  (testing "Emoji with ANSI colors"
+    (is (= 2 (core/visible-width (core/color :green "✓"))))))
+
+(deftest test-visible-width-combining
+  (testing "Combining diacritical marks (width 0)"
+    ;; e + combining acute accent
+    (is (= 1 (core/visible-width "é")))  ; NFC form
+    (is (= 1 (core/visible-width "e\u0301"))))  ; NFD form with combining acute
+
+  (testing "Zero-width characters"
+    ;; Zero Width Space
+    (is (= 10 (core/visible-width "Hello\u200BWorld")))  ; Hello=5, ZWS=0, World=5 = 10
+    ;; Zero Width Non-Joiner
+    (is (= 4 (core/visible-width "test\u200C"))))
+
+  (testing "String with variation selectors (width 0)"
+    ;; Text style variation selector
+    (is (= 1 (core/visible-width "©\uFE0E")))))  ; Copyright symbol + text variation
+
+(deftest test-visible-width-fullwidth
+  (testing "Fullwidth ASCII forms (width 2)"
+    ;; Fullwidth Latin letters
+    (is (= 10 (core/visible-width "ＡＢＣＤＥ")))  ; 5 fullwidth chars × 2
+    (is (= 6 (core/visible-width "１２３"))))  ; 3 fullwidth digits × 2
+
+  (testing "Mixed halfwidth and fullwidth"
+    (is (= 7 (core/visible-width "ABC１２")))))  ; 3 + 4 = 7
+
+(deftest test-visible-width-control-chars
+  (testing "Control characters (width 0)"
+    (is (= 5 (core/visible-width "Hello")))
+    (is (= 10 (core/visible-width "Hello\nWorld")))  ; newline = 0 width
+    (is (= 10 (core/visible-width "Hello\tWorld")))  ; tab = 0 width (for display width)
+    (is (= 10 (core/visible-width "Hello\rWorld")))))  ; CR = 0 width
+
+(deftest test-visible-width-edge-cases
+  (testing "Nil handling"
+    (is (thrown? clojure.lang.ExceptionInfo (core/visible-width nil))))
+
+  (testing "Empty string"
+    (is (= 0 (core/visible-width ""))))
+
+  (testing "String with only ANSI codes"
+    (is (= 0 (core/visible-width "\u001B[31m\u001B[0m"))))
+
+  (testing "Very long strings"
+    (let [long-str (apply str (repeat 10000 "A"))]
+      (is (= 10000 (core/visible-width long-str)))))
+
+  (testing "Very long CJK strings"
+    (let [long-cjk (apply str (repeat 1000 "中"))]
+      (is (= 2000 (core/visible-width long-cjk))))))
+
+(deftest test-visible-width-vs-length
+  (testing "visible-width gives different results than visible-length for CJK"
+    (is (= 2 (core/visible-width "日")))
+    (is (= 1 (core/visible-length "日")))
+    (is (not= (core/visible-width "日本語")
+              (core/visible-length "日本語"))))
+
+  (testing "visible-width same as visible-length for ASCII"
+    (is (= (core/visible-width "Hello")
+           (core/visible-length "Hello")))
+    (is (= (core/visible-width "Test 123")
+           (core/visible-length "Test 123")))))
+
+(deftest test-visible-width-practical
+  (testing "Practical UI examples"
+    ;; Status indicators with emoji
+    (is (= 9 (core/visible-width "✓ Passed")))  ; 2 + 7 = 9
+    (is (= 9 (core/visible-width "✗ Failed")))  ; 2 + 7 = 9
+
+    ;; Mixed content
+    (is (= 18 (core/visible-width "User: 张三 (Admin)")))  ; 6 + 4 + 8 = 18
+
+    ;; Progress indicators
+    (is (= 6 (core/visible-width "█████░")))))  ; 6 blocks × 1 = 6... wait, these might be fullwidth
 
 ;; ──────────────────────── Edge Cases ──────────────────────
 

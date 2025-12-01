@@ -192,17 +192,135 @@
    :primary :blue
    :secondary :magenta})
 
+;; ────────────────────── Unicode Width Calculation ──────────────────────
+
+(defn- char-width
+  "Calculate display width of a single character
+
+   Returns:
+   - 0 for control characters, zero-width characters, combining marks
+   - 1 for most characters (ASCII, Latin, etc.)
+   - 2 for wide characters (CJK, fullwidth forms)
+
+   Based on Unicode Standard Annex #11 (East Asian Width)
+   and wcwidth implementation"
+  [^Character c]
+  (let [cp (int c)
+        type (Character/getType c)]
+    (cond
+      ;; Control characters (C0, C1)
+      (or (< cp 0x20) (and (>= cp 0x7F) (< cp 0xA0)))
+      0
+
+      ;; Zero-width characters
+      ;; Zero Width Space, Zero Width Non-Joiner, Zero Width Joiner
+      (or (= cp 0x200B) (= cp 0x200C) (= cp 0x200D))
+      0
+
+      ;; Combining characters (marks)
+      ;; These overlay previous characters and don't add width
+      (or (= type Character/NON_SPACING_MARK)
+          (= type Character/ENCLOSING_MARK)
+          (= type Character/COMBINING_SPACING_MARK))
+      0
+
+      ;; Hangul Jamo combining characters
+      (and (>= cp 0x1160) (<= cp 0x11FF))
+      0
+
+      ;; Variation Selectors (VS1-VS16, VS17-VS256)
+      (or (and (>= cp 0xFE00) (<= cp 0xFE0F))
+          (and (>= cp 0xE0100) (<= cp 0xE01EF)))
+      0
+
+      ;; Wide characters (East Asian Width = W or F)
+      ;; CJK Unified Ideographs
+      (or (and (>= cp 0x4E00) (<= cp 0x9FFF))
+          (and (>= cp 0x3400) (<= cp 0x4DBF))
+          (and (>= cp 0x20000) (<= cp 0x2A6DF))
+          (and (>= cp 0x2A700) (<= cp 0x2B73F))
+          (and (>= cp 0x2B740) (<= cp 0x2B81F))
+          (and (>= cp 0x2B820) (<= cp 0x2CEAF))
+          (and (>= cp 0x2CEB0) (<= cp 0x2EBEF))
+          (and (>= cp 0x30000) (<= cp 0x3134F)))
+      2
+
+      ;; Hangul Syllables
+      (and (>= cp 0xAC00) (<= cp 0xD7A3))
+      2
+
+      ;; CJK Compatibility Ideographs
+      (or (and (>= cp 0xF900) (<= cp 0xFAFF))
+          (and (>= cp 0x2F800) (<= cp 0x2FA1F)))
+      2
+
+      ;; Fullwidth forms
+      (and (>= cp 0xFF01) (<= cp 0xFF60))
+      2
+
+      ;; Fullwidth forms (continued)
+      (and (>= cp 0xFFE0) (<= cp 0xFFE6))
+      2
+
+      ;; Hiragana and Katakana
+      (or (and (>= cp 0x3040) (<= cp 0x309F))
+          (and (>= cp 0x30A0) (<= cp 0x30FF)))
+      2
+
+      ;; Emoji presentation characters (most common range)
+      ;; Note: This is simplified; full emoji support requires checking
+      ;; Unicode emoji data and handling ZWJ sequences
+      (or (and (>= cp 0x1F300) (<= cp 0x1F9FF))
+          (and (>= cp 0x1F600) (<= cp 0x1F64F))
+          (and (>= cp 0x1F680) (<= cp 0x1F6FF))
+          (and (>= cp 0x2600) (<= cp 0x26FF))
+          (and (>= cp 0x2700) (<= cp 0x27BF)))
+      2
+
+      ;; Default: narrow character (width 1)
+      :else
+      1)))
+
+(defn- strip-ansi
+  "Remove ANSI escape sequences from string"
+  [s]
+  (str/replace s #"\u001B\[[0-9;]*m" ""))
+
+(defn visible-width
+  "Calculate accurate display width of string accounting for Unicode
+
+   Handles:
+   - ANSI escape codes (stripped, width 0)
+   - Wide characters (CJK, fullwidth) - width 2
+   - Combining characters - width 0
+   - Zero-width characters (ZWJ, ZWNJ, etc.) - width 0
+   - Control characters - width 0
+   - Most emoji - width 2
+   - Regular characters - width 1
+
+   This is the recommended function for calculating string width
+   for terminal layout and alignment.
+
+   Note: Complex emoji sequences with ZWJ (Zero Width Joiner) may
+   not be perfectly accurate as they require full grapheme cluster
+   analysis. Most common emoji are handled correctly."
+  [s]
+  (when-not s
+    (throw (ex-info "Cannot calculate width of nil string" {:string s})))
+  (let [clean (strip-ansi s)]
+    (reduce + 0 (map char-width clean))))
+
 (defn visible-length
   "Calculate visible length of string, stripping ANSI codes
 
-   Note: This strips ANSI codes but does NOT handle:
-   - Wide characters (CJK) - counted as 1 but display as 2
-   - Combining characters - counted but may not display width
-   - Emoji with ZWJ - may count incorrectly
+   DEPRECATED: Use visible-width instead for accurate Unicode handling.
 
-   For accurate Unicode width, see: visible-width (TODO)"
+   This function only strips ANSI codes and counts characters,
+   without accounting for wide characters or combining marks.
+   It's kept for backward compatibility but will give incorrect
+   results for CJK text, emoji, and other Unicode edge cases."
   [s]
-  (count (str/replace s #"\u001B\[[0-9;]*m" "")))
+  (count (strip-ansi s)))
 
 ;; ────────────────────── Terminal Control ──────────────────────
 (defn hide-cursor

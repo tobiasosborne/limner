@@ -48,7 +48,7 @@
 (defn draw-content-line
   "Draw a content line with vertical borders and padding"
   [content width vertical-char]
-  (let [visible (core/visible-length content)
+  (let [visible (core/visible-width content)
         needed  (- width visible)]
     (str vertical-char " " content (apply str (repeat needed " ")) " " vertical-char)))
 
@@ -57,7 +57,7 @@
    Returns a vector of strings (one per line)"
   [lines & {:keys [border-style] :or {border-style :single}}]
   (let [[tl tr bl br h v] (get-border-chars border-style)
-        maxw (+ (apply max (map core/visible-length lines)) 4)
+        maxw (+ (apply max (map core/visible-width lines)) 4)
         top-line (draw-horizontal tl tr (- maxw 2) h)
         bottom-line (draw-horizontal bl br (- maxw 2) h)
         content-lines (map #(draw-content-line % (- maxw 4) v) lines)]
@@ -71,7 +71,7 @@
   (let [[tl tr bl br h v] (get-border-chars border-style)
         title-str (str " " title " ")
         title-len (count title-str)
-        content-maxw (+ (apply max (map core/visible-length lines)) 4)
+        content-maxw (+ (apply max (map core/visible-width lines)) 4)
         ;; Ensure box is wide enough for both content and title
         maxw (max content-maxw (+ title-len 2))
         inner-width (- maxw 2)
@@ -114,7 +114,7 @@
                           box-lines)
         ;; Add bottom shadow line
         last-line (last with-right-shadow)
-        shadow-width (core/visible-length last-line)
+        shadow-width (core/visible-width last-line)
         bottom-shadow (str " " (apply str (repeat (dec shadow-width) shadow-ch)))]
     (concat with-right-shadow [bottom-shadow])))
 
@@ -136,7 +136,7 @@
                           box-lines)
         ;; Add 2 bottom shadow lines
         last-line (last with-right-shadow)
-        shadow-width (core/visible-length last-line)
+        shadow-width (core/visible-width last-line)
         bottom-shadow-1 (str "  " (apply str (repeat (- shadow-width 2) shadow-ch)))
         bottom-shadow-2 (str "  " (apply str (repeat (- shadow-width 2) shadow-ch)))]
     (concat with-right-shadow [bottom-shadow-1 bottom-shadow-2])))
@@ -161,7 +161,7 @@
   "Place two boxes side by side with spacing between them
    Returns combined lines suitable for wrapping in outer box"
   [left-box-lines right-box-lines spacing]
-  (let [left-width (core/visible-length (first left-box-lines))
+  (let [left-width (core/visible-width (first left-box-lines))
         space-str (apply str (repeat spacing " "))
         max-height (max (count left-box-lines) (count right-box-lines))
         ;; Pad shorter box with empty lines
