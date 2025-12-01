@@ -311,6 +311,14 @@
 
 ;; ────────────────────── Render Loop ──────────────────────
 
+(defn- calculate-sleep-time
+  "Calculate how long to sleep to maintain target FPS"
+  [target-fps last-frame-time]
+  (let [target-frame-time (/ 1000.0 target-fps)
+        elapsed (- (System/currentTimeMillis) last-frame-time)
+        sleep-time (- target-frame-time elapsed)]
+    (max 1 (long sleep-time))))
+
 (defn create-render-loop
   "Create a render loop that renders content from a state atom
 
@@ -318,45 +326,89 @@
    - :fps - target frames per second (default 60)
    - :render-fn - function that takes app-state and returns vector of lines
    - :on-frame - optional callback called each frame with render-state
+   - :on-error - optional error handler (fn [exception] ...)
 
    Returns a map with control functions:
-   - :stop! - function to stop the render loop
+   - :stop! - function to stop the render loop (blocks until stopped)
    - :force-render! - function to force immediate render
-   - :get-stats - function to get render statistics"
-  [app-state-atom & {:keys [fps render-fn on-frame]
+   - :get-stats - function to get render statistics
+   - :running? - function to check if loop is still running
+
+   Thread Safety:
+   - Uses future for managed concurrency
+   - Proper shutdown coordination via promise
+   - Error handling with optional callback
+   - Graceful cleanup on shutdown"
+  [app-state-atom & {:keys [fps render-fn on-frame on-error]
                      :or {fps 60}}]
+  {:pre [(fn? render-fn)
+         (or (nil? on-frame) (fn? on-frame))
+         (or (nil? on-error) (fn? on-error))]}
+
   (let [term-size (get-terminal-size)
         render-state (atom (render-state (:width term-size) (:height term-size)))
         running (atom true)
+        shutdown-promise (promise)
+        error-atom (atom nil)
 
-        render-thread
-        (Thread.
-          (fn []
-            (try
-              (setup-terminal)
+        ;; Use future instead of raw Thread for managed concurrency
+        render-future
+        (future
+          (try
+            (setup-terminal)
 
-              ;; Initial render
-              (let [content (render-fn @app-state-atom)]
-                (swap! render-state force-render content))
+            ;; Initial render
+            (let [content (render-fn @app-state-atom)]
+              (swap! render-state force-render content))
 
-              ;; Main loop
-              (while @running
-                (let [content (render-fn @app-state-atom)]
-                  (swap! render-state render-frame content)
+            ;; Main loop
+            (loop [last-frame-time (System/currentTimeMillis)]
+              (when @running
+                (try
+                  ;; Render frame
+                  (let [content (render-fn @app-state-atom)]
+                    (swap! render-state render-frame content)
 
-                  (when on-frame
-                    (on-frame @render-state)))
+                    ;; Optional frame callback
+                    (when on-frame
+                      (on-frame @render-state)))
 
-                (Thread/sleep 1))
+                  ;; Handle render errors
+                  (catch Exception e
+                    (reset! error-atom e)
+                    (when on-error
+                      (try
+                        (on-error e)
+                        (catch Exception callback-error
+                          ;; Don't let error handler crash the loop
+                          (binding [*out* *err*]
+                            (println "Error in on-error callback:" callback-error)))))))
 
-              (finally
-                (restore-terminal)))))]
+                ;; Sleep to maintain target FPS
+                (let [sleep-time (calculate-sleep-time fps last-frame-time)]
+                  (Thread/sleep sleep-time))
 
-    (.start render-thread)
+                ;; Continue loop
+                (recur (System/currentTimeMillis))))
 
+            ;; Cleanup
+            (finally
+              (restore-terminal)
+              (deliver shutdown-promise true))))]
+
+    ;; Return control map
     {:stop! (fn []
               (reset! running false)
-              (.join render-thread 1000))
+              ;; Wait for clean shutdown with timeout
+              (let [result (deref shutdown-promise 2000 :timeout)]
+                (when (= result :timeout)
+                  (binding [*out* *err*]
+                    (println "Warning: Render loop did not stop within 2 seconds"))
+                  ;; Force cancellation as last resort
+                  (future-cancel render-future))
+                ;; Re-throw any errors that occurred
+                (when-let [error @error-atom]
+                  (throw error))))
 
      :force-render! (fn []
                       (let [content (render-fn @app-state-atom)]
@@ -365,9 +417,16 @@
      :get-stats (fn []
                   {:frame-count (:frame-count @render-state)
                    :current-fps (get-fps @render-state)
-                   :target-fps (:target-fps @render-state)
+                   :target-fps fps
                    :width (:width @render-state)
-                   :height (:height @render-state)})}))
+                   :height (:height @render-state)
+                   :running @running
+                   :error @error-atom})
+
+     :running? (fn []
+                 @running)
+
+     :future render-future}))
 
 ;; ────────────────────── Simple Render Function ──────────────────────
 
