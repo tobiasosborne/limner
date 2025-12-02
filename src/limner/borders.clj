@@ -96,7 +96,7 @@
 ;; ────────────────────── Shadow Effects ──────────────────────
 (defn add-shadow
   "Add a drop shadow effect to box lines
-   Shadow appears on the right and bottom edges
+   Shadow appears on the right and bottom edges (light source from top-left)
    Options:
    - :shadow-char - character to use for shadow (default '░')
    - :shadow-color - ANSI color for shadow (default nil)"
@@ -105,40 +105,28 @@
   (let [shadow-ch (if shadow-color
                     (core/color shadow-color shadow-char)
                     shadow-char)
-        ;; Add shadow to right edge of each line (except last)
-        with-right-shadow (map-indexed
-                          (fn [idx line]
-                            (if (< idx (dec (count box-lines)))
-                              (str line shadow-ch)
-                              line))
-                          box-lines)
-        ;; Add bottom shadow line
-        last-line (last with-right-shadow)
-        shadow-width (core/visible-width last-line)
-        bottom-shadow (str " " (apply str (repeat (dec shadow-width) shadow-ch)))]
+        ;; Get width before adding shadows
+        box-width (core/visible-width (first box-lines))
+        ;; Add shadow to right edge of ALL lines
+        with-right-shadow (map (fn [line] (str line shadow-ch)) box-lines)
+        ;; Add bottom shadow line - offset by 1 space, fills entire width + corner
+        bottom-shadow (str " " (apply str (repeat (inc box-width) shadow-ch)))]
     (concat with-right-shadow [bottom-shadow])))
 
 (defn add-heavy-shadow
-  "Add a heavier 2-character shadow effect"
+  "Add a heavier 2-character shadow effect (light source from top-left)"
   [box-lines & {:keys [shadow-char shadow-color]
                 :or {shadow-char "▓"}}]
   (let [shadow-ch (if shadow-color
                     (core/color shadow-color shadow-char)
                     shadow-char)
-        ;; Add 2-char shadow to right edge
-        with-right-shadow (map-indexed
-                          (fn [idx line]
-                            (if (< idx (- (count box-lines) 2))
-                              (str line shadow-ch shadow-ch)
-                              (if (= idx (- (count box-lines) 2))
-                                (str line shadow-ch shadow-ch)
-                                line)))
-                          box-lines)
-        ;; Add 2 bottom shadow lines
-        last-line (last with-right-shadow)
-        shadow-width (core/visible-width last-line)
-        bottom-shadow-1 (str "  " (apply str (repeat (- shadow-width 2) shadow-ch)))
-        bottom-shadow-2 (str "  " (apply str (repeat (- shadow-width 2) shadow-ch)))]
+        ;; Get width before adding shadows
+        box-width (core/visible-width (first box-lines))
+        ;; Add 2-char shadow to right edge of ALL lines
+        with-right-shadow (map (fn [line] (str line shadow-ch shadow-ch)) box-lines)
+        ;; Add 2 bottom shadow lines - offset by 2 spaces, fills entire width + corner
+        bottom-shadow-1 (str "  " (apply str (repeat (+ box-width 2) shadow-ch)))
+        bottom-shadow-2 (str "  " (apply str (repeat (+ box-width 2) shadow-ch)))]
     (concat with-right-shadow [bottom-shadow-1 bottom-shadow-2])))
 
 ;; ────────────────────── Nested Box Support ──────────────────────
