@@ -212,8 +212,14 @@ These improve performance, maintainability, or developer experience.
 - [ ] Use transducers for string building pipeline
 - [ ] Profile before/after performance
 - [ ] Consider using Java's `String.repeat()` (Java 11+)
+- [ ] Fix shadow rendering physics (light source direction)
+- [ ] Fix border spacing issues in titled boxes
 
 **Estimated Impact:** Low-Medium - reduces GC pressure
+
+**Known Issues:**
+- Shadow effects have incorrect light source physics
+- Some titled boxes have spacing alignment issues
 
 ---
 

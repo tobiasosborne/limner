@@ -697,4 +697,10 @@ The library now has:
 **When Resuming:**
 Optional improvements available (Important/Nice-to-Have issues):
 - Error handling, async events, terminal resizing, performance optimization
+- Border rendering fixes (shadow physics, spacing alignment)
 - But library is now stable and production-ready!
+
+**Known Minor Issues:**
+- Shadow effects have incorrect light source physics (cosmetic)
+- Some titled boxes have spacing alignment issues (cosmetic)
+- These are non-critical visual issues in borders.clj
