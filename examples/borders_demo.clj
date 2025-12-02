@@ -15,9 +15,11 @@
 
 ;; ──────────────── Demo 1: Predefined Styles ────────────────
 (defn demo-predefined-styles []
-  (println (core/color :bright-green "\n╔══════════════════════════════════════════╗"))
-  (println (core/color :bright-green "║  Demo 1: Predefined Border Styles       ║"))
-  (println (core/color :bright-green "╚══════════════════════════════════════════╝"))
+  (let [header (borders/draw-titled-box "Demo 1: Predefined Border Styles"
+                                        []
+                                        :border-style :double)]
+    (doseq [line header]
+      (println (core/color :bright-green line))))
 
   (let [content ["Hello, World!" "This is a demo" "of border styles"]]
 

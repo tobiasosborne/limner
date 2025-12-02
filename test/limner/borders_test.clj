@@ -91,13 +91,21 @@
     (let [lines ["┌─────┐" "│ Hi  │" "└─────┘"]
           with-shadow (borders/add-shadow lines)]
       (is (> (count with-shadow) (count lines)))
-      (is (str/ends-with? (first with-shadow) "░"))))
+      ;; First line (top border) should NOT have shadow (light from above)
+      (is (not (str/ends-with? (first with-shadow) "░")))
+      ;; Middle and bottom lines should have shadow
+      (is (str/ends-with? (second with-shadow) "░"))
+      (is (str/ends-with? (nth with-shadow 2) "░"))))
 
   (testing "Add heavy shadow"
     (let [lines ["┌─────┐" "│ Hi  │" "└─────┘"]
           with-shadow (borders/add-heavy-shadow lines)]
       (is (> (count with-shadow) (count lines)))
-      (is (str/includes? (first with-shadow) "▓")))))
+      ;; First line (top border) should NOT have shadow (light from above)
+      (is (not (str/includes? (first with-shadow) "▓")))
+      ;; Middle and bottom lines should have shadow
+      (is (str/includes? (second with-shadow) "▓"))
+      (is (str/includes? (nth with-shadow 2) "▓")))))
 
 ;; ────────────────────── Nested Box Tests ──────────────────────
 (deftest test-nested-boxes

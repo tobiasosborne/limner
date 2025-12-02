@@ -71,7 +71,10 @@
   (let [[tl tr bl br h v] (get-border-chars border-style)
         title-str (str " " title " ")
         title-len (count title-str)
-        content-maxw (+ (apply max (map core/visible-width lines)) 4)
+        ;; Handle empty lines case
+        content-maxw (if (empty? lines)
+                      0
+                      (+ (apply max (map core/visible-width lines)) 4))
         ;; Ensure box is wide enough for both content and title
         maxw (max content-maxw (+ title-len 2))
         inner-width (- maxw 2)
@@ -96,7 +99,7 @@
 ;; ────────────────────── Shadow Effects ──────────────────────
 (defn add-shadow
   "Add a drop shadow effect to box lines
-   Shadow appears on the right and bottom edges (light source from top-left)
+   Shadow appears on the right and bottom edges (light source from above)
    Options:
    - :shadow-char - character to use for shadow (default '░')
    - :shadow-color - ANSI color for shadow (default nil)"
@@ -107,14 +110,19 @@
                     shadow-char)
         ;; Get width before adding shadows
         box-width (core/visible-width (first box-lines))
-        ;; Add shadow to right edge of ALL lines
-        with-right-shadow (map (fn [line] (str line shadow-ch)) box-lines)
-        ;; Add bottom shadow line - offset by 1 space, fills entire width + corner
-        bottom-shadow (str " " (apply str (repeat (inc box-width) shadow-ch)))]
+        ;; Add shadow to right edge - skip first line (light hits it from above)
+        with-right-shadow (map-indexed
+                          (fn [idx line]
+                            (if (zero? idx)
+                              line  ; No shadow on top border
+                              (str line shadow-ch)))
+                          box-lines)
+        ;; Add bottom shadow line - offset by 2 spaces, fills entire width
+        bottom-shadow (str "  " (apply str (repeat box-width shadow-ch)))]
     (concat with-right-shadow [bottom-shadow])))
 
 (defn add-heavy-shadow
-  "Add a heavier 2-character shadow effect (light source from top-left)"
+  "Add a heavier 2-character shadow effect (light source from above)"
   [box-lines & {:keys [shadow-char shadow-color]
                 :or {shadow-char "▓"}}]
   (let [shadow-ch (if shadow-color
@@ -122,11 +130,16 @@
                     shadow-char)
         ;; Get width before adding shadows
         box-width (core/visible-width (first box-lines))
-        ;; Add 2-char shadow to right edge of ALL lines
-        with-right-shadow (map (fn [line] (str line shadow-ch shadow-ch)) box-lines)
-        ;; Add 2 bottom shadow lines - offset by 2 spaces, fills entire width + corner
-        bottom-shadow-1 (str "  " (apply str (repeat (+ box-width 2) shadow-ch)))
-        bottom-shadow-2 (str "  " (apply str (repeat (+ box-width 2) shadow-ch)))]
+        ;; Add 2-char shadow to right edge - skip first line (light hits it from above)
+        with-right-shadow (map-indexed
+                          (fn [idx line]
+                            (if (zero? idx)
+                              line  ; No shadow on top border
+                              (str line shadow-ch shadow-ch)))
+                          box-lines)
+        ;; Add 2 bottom shadow lines - offset by 2 spaces, fills entire width
+        bottom-shadow-1 (str "  " (apply str (repeat box-width shadow-ch)))
+        bottom-shadow-2 (str "  " (apply str (repeat box-width shadow-ch)))]
     (concat with-right-shadow [bottom-shadow-1 bottom-shadow-2])))
 
 ;; ────────────────────── Nested Box Support ──────────────────────
