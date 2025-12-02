@@ -1,25 +1,18 @@
 (ns limner.state-test
   (:require [clojure.test :refer [deftest is testing]]
             [limner.state :as state]
-            [clojure.string :as str]
-            [clojure.java.io :as io]))
+            [clojure.string :as str]))
 
 ;; ──────────────────────── State Creation Tests ──────────────────────
 
 (deftest test-create-state
   (testing "Create state with default values"
     (let [s (state/create-state)]
-      (is (= {} @s))
-      (is (= 1 (state/history-size s)))))
+      (is (= {} @s))))
 
   (testing "Create state with initial value"
     (let [s (state/create-state :initial-value {:count 0 :name "test"})]
-      (is (= {:count 0 :name "test"} @s))))
-
-  (testing "Create state with history disabled"
-    (let [s (state/create-state :enable-history false)]
-      (state/update-state! s assoc :count 1)
-      (is (= 0 (state/history-size s))))))
+      (is (= {:count 0 :name "test"} @s)))))
 
 ;; ──────────────────────── State Access Tests ──────────────────────
 
@@ -65,65 +58,6 @@
       (state/dissoc-in-state! s [:user :age])
       (is (= {:user {:name "Alice"}} @s)))))
 
-;; ──────────────────────── History Tests ──────────────────────
-
-(deftest test-undo-redo
-  (testing "Can undo after changes"
-    (let [s (state/create-state :initial-value {:count 0})]
-      (state/update-state! s assoc :count 1)
-      (state/update-state! s assoc :count 2)
-      (is (state/can-undo? s))
-      (state/undo! s)
-      (is (= {:count 1} @s))
-      (state/undo! s)
-      (is (= {:count 0} @s))))
-
-  (testing "Can redo after undo"
-    (let [s (state/create-state :initial-value {:count 0})]
-      (state/update-state! s assoc :count 1)
-      (state/update-state! s assoc :count 2)
-      (state/undo! s)
-      (is (state/can-redo? s))
-      (state/redo! s)
-      (is (= {:count 2} @s))))
-
-  (testing "Cannot undo when no history"
-    (let [s (state/create-state :initial-value {:count 0})]
-      (is (not (state/can-undo? s)))
-      (is (false? (state/undo! s)))))
-
-  (testing "Cannot redo when at end of history"
-    (let [s (state/create-state :initial-value {:count 0})]
-      (state/update-state! s assoc :count 1)
-      (is (not (state/can-redo? s)))
-      (is (false? (state/redo! s)))))
-
-  (testing "New change clears redo history"
-    (let [s (state/create-state :initial-value {:count 0})]
-      (state/update-state! s assoc :count 1)
-      (state/update-state! s assoc :count 2)
-      (state/undo! s)
-      (is (state/can-redo? s))
-      (state/update-state! s assoc :count 3)
-      (is (not (state/can-redo? s)))))
-
-  (testing "History respects size limit"
-    (let [s (state/create-state :initial-value {:count 0} :history-limit 3)]
-      (dotimes [i 10]
-        (state/update-state! s assoc :count (inc i)))
-      (is (<= (state/history-size s) 3)))))
-
-(deftest test-clear-history
-  (testing "Clear history removes all undo/redo"
-    (let [s (state/create-state :initial-value {:count 0})]
-      (state/update-state! s assoc :count 1)
-      (state/update-state! s assoc :count 2)
-      (is (pos? (state/history-size s)))
-      (state/clear-history! s)
-      ;; After clear, history has only current state
-      (is (= 1 (state/history-size s)))
-      (is (not (state/can-undo? s))))))
-
 ;; ──────────────────────── Watcher Tests ──────────────────────
 
 (deftest test-watchers
@@ -138,26 +72,6 @@
       (is (= {:count 0} (:old (first @calls))))
       (is (= {:count 1} (:new (first @calls))))))
 
-  (testing "Watcher does not fire when paused"
-    (let [s (state/create-state :initial-value {:count 0})
-          calls (atom 0)
-          watcher (fn [_ _ _ _] (swap! calls inc))]
-      (state/add-watcher! s :test-watcher watcher)
-      (state/pause-watcher! s :test-watcher)
-      (state/update-state! s assoc :count 1)
-      (is (zero? @calls))))
-
-  (testing "Watcher fires again after resume"
-    (let [s (state/create-state :initial-value {:count 0})
-          calls (atom 0)
-          watcher (fn [_ _ _ _] (swap! calls inc))]
-      (state/add-watcher! s :test-watcher watcher)
-      (state/pause-watcher! s :test-watcher)
-      (state/update-state! s assoc :count 1)
-      (state/resume-watcher! s :test-watcher)
-      (state/update-state! s assoc :count 2)
-      (is (= 1 @calls))))
-
   (testing "Remove watcher stops notifications"
     (let [s (state/create-state :initial-value {:count 0})
           calls (atom 0)
@@ -167,29 +81,6 @@
       (state/remove-watcher! s :test-watcher)
       (state/update-state! s assoc :count 2)
       (is (= 1 @calls)))))
-
-(deftest test-pause-resume-all-watchers
-  (testing "Pause all watchers"
-    (let [s (state/create-state :initial-value {:count 0})
-          calls (atom 0)
-          watcher (fn [_ _ _ _] (swap! calls inc))]
-      (state/add-watcher! s :watcher1 watcher)
-      (state/add-watcher! s :watcher2 watcher)
-      (state/pause-all-watchers! s)
-      (state/update-state! s assoc :count 1)
-      (is (zero? @calls))))
-
-  (testing "Resume all watchers"
-    (let [s (state/create-state :initial-value {:count 0})
-          calls (atom 0)
-          watcher (fn [_ _ _ _] (swap! calls inc))]
-      (state/add-watcher! s :watcher1 watcher)
-      (state/add-watcher! s :watcher2 watcher)
-      (state/pause-all-watchers! s)
-      (state/update-state! s assoc :count 1)
-      (state/resume-all-watchers! s)
-      (state/update-state! s assoc :count 2)
-      (is (= 2 @calls)))))
 
 ;; ──────────────────────── Reactive Watcher Tests ──────────────────────
 
@@ -242,59 +133,6 @@
       (state/update-state! s assoc :count 11)
       (is (true? @triggered)))))
 
-;; ──────────────────────── Serialization Tests ──────────────────────
-
-(deftest test-serialization
-  (testing "Serialize and deserialize state"
-    (let [s (state/create-state :initial-value {:count 42 :name "Test"})
-          serialized (state/serialize s)
-          deserialized (state/deserialize serialized)]
-      (is (= @s @deserialized))))
-
-  (testing "Serialize with history"
-    (let [s (state/create-state :initial-value {:count 0})]
-      (state/update-state! s assoc :count 1)
-      (state/update-state! s assoc :count 2)
-
-      (let [serialized (state/serialize s :include-history true)
-            deserialized (state/deserialize serialized)]
-        (is (= @s @deserialized))
-        (is (= (state/history-size s) (state/history-size deserialized)))
-        (is (state/can-undo? deserialized))))))
-
-(deftest test-file-serialization
-  (testing "Save and load from file"
-    (let [temp-file (str "/tmp/limner-state-test-" (System/currentTimeMillis) ".edn")
-          s (state/create-state :initial-value {:test "data" :count 123})]
-
-      (try
-        ;; Save to file
-        (state/save-to-file s temp-file)
-        (is (.exists (io/file temp-file)))
-
-        ;; Load from file
-        (let [loaded (state/load-from-file temp-file)]
-          (is (= @s @loaded)))
-
-        (finally
-          ;; Clean up
-          (io/delete-file temp-file true))))))
-
-;; ──────────────────────── State Info Tests ──────────────────────
-
-(deftest test-state-info
-  (testing "Get state information"
-    (let [s (state/create-state :initial-value {:count 0})]
-      (state/update-state! s assoc :count 1)
-      (state/add-watcher! s :test (fn [_ _ _ _] nil))
-
-      (let [info (state/state-info s)]
-        (is (= {:count 1} (:value info)))
-        (is (:history-enabled info))
-        (is (pos? (:history-size info)))
-        (is (state/can-undo? s) (:can-undo info))
-        (is (contains? (set (:watchers info)) :test))))))
-
 ;; ──────────────────────── Reactive State Tests ──────────────────────
 
 (deftest test-reactive-state
@@ -321,17 +159,7 @@
       (let [watchers (state/list-watchers s)]
         (is (= 2 (count watchers)))
         (is (contains? (set watchers) :watcher1))
-        (is (contains? (set watchers) :watcher2)))))
-
-  (testing "List paused watchers"
-    (let [s (state/create-state)]
-      (state/add-watcher! s :watcher1 (fn [_ _ _ _] nil))
-      (state/add-watcher! s :watcher2 (fn [_ _ _ _] nil))
-      (state/pause-watcher! s :watcher1)
-
-      (let [paused (state/list-paused-watchers s)]
-        (is (= 1 (count paused)))
-        (is (contains? paused :watcher1))))))
+        (is (contains? (set watchers) :watcher2))))))
 
 ;; ──────────────────────── Integration Tests ──────────────────────
 
@@ -352,34 +180,21 @@
       ;; Check log
       (is (= 2 (count @log)))
 
-      ;; Undo
-      (state/undo! s)
-      (is (= 1 (count (:users @s))))
+      ;; Verify final state
+      (is (= 2 (count (:users @s)))))))
 
-      ;; Redo
-      (state/redo! s)
-      (is (= 2 (count (:users @s))))
-
-      ;; Serialize and restore
-      (let [serialized (state/serialize s)
-            restored (state/deserialize serialized)]
-        (is (= @s @restored))))))
-
-(deftest test-without-watchers
-  (testing "Update without triggering watchers"
+(deftest test-bind-to-render
+  (testing "Bind state to render control"
     (let [s (state/create-state :initial-value {:count 0})
-          calls (atom 0)]
-      (state/add-watcher! s :counter (fn [_ _ _ _] (swap! calls inc)))
+          render-calls (atom 0)
+          render-control {:force-render! (fn [] (swap! render-calls inc))}]
 
-      ;; Normal update - fires watcher
+      (state/bind-to-render s render-control)
+
+      ;; Update state - should trigger render
       (state/update-state! s assoc :count 1)
-      (is (= 1 @calls))
+      (is (= 1 @render-calls))
 
-      ;; Update without watchers
-      (state/without-watchers s
-        #(state/update-state! s assoc :count 2))
-      (is (= 1 @calls)) ; Still 1, watcher didn't fire
-
-      ;; Normal update again - fires watcher
-      (state/update-state! s assoc :count 3)
-      (is (= 2 @calls)))))
+      ;; Update again
+      (state/update-state! s assoc :count 2)
+      (is (= 2 @render-calls)))))

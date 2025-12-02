@@ -1,58 +1,32 @@
 (ns limner.state
-  "Application state management with reactive updates and undo/redo"
-  (:require [clojure.string :as str]
-            [clojure.edn :as edn]))
+  "Simple application state management with reactive updates
+
+   This is a simplified state management system that wraps Clojure atoms
+   with convenient helpers for common patterns in TUI applications.
+
+   Previous versions included undo/redo functionality which has been removed
+   due to race conditions and over-engineering. If you need undo/redo, consider
+   implementing it at the application level or using a dedicated library.")
 
 ;; ────────────────────── State Creation ──────────────────────
 
 (defn create-state
-  "Create a new application state atom with metadata
+  "Create a new application state atom
 
    Options:
    - :initial-value - initial state value (default {})
-   - :history-limit - maximum undo history size (default 50)
-   - :enable-history - enable undo/redo (default true)
    - :watchers - map of watcher-id to watcher-fn
 
-   Returns an atom with metadata for history tracking"
-  [& {:keys [initial-value history-limit enable-history watchers]
+   Returns a plain Clojure atom with optional watchers attached"
+  [& {:keys [initial-value watchers]
       :or {initial-value {}
-           history-limit 50
-           enable-history true
            watchers {}}}]
   (let [state-atom (atom initial-value
-                        :meta {:history (if enable-history [initial-value] [])
-                               :history-position (if enable-history 0 -1)
-                               :history-limit history-limit
-                               :enable-history enable-history
-                               :watchers (atom watchers)
-                               :paused-watchers (atom #{})
-                               :recording-history true})]
-
-    ;; Add internal watcher for history recording if enabled
-    (when enable-history
-      (add-watch state-atom ::history-recorder
-        (fn [_ _ old-state new-state]
-          (when (and (get (meta state-atom) :enable-history)
-                    (get (meta state-atom) :recording-history)
-                    (not= old-state new-state))
-            (let [history-limit (get (meta state-atom) :history-limit)
-                  current-pos (get (meta state-atom) :history-position)
-                  current-history (get (meta state-atom) :history)
-                  trimmed-history (vec (take (inc current-pos) current-history))
-                  new-history (conj trimmed-history new-state)
-                  final-history (if (> (count new-history) history-limit)
-                                 (vec (take-last history-limit new-history))
-                                 new-history)
-                  new-position (dec (count final-history))]
-              (alter-meta! state-atom assoc
-                           :history final-history
-                           :history-position new-position))))))
-
+                        :meta {:watchers (atom {})})]
     ;; Add user watchers if provided
     (doseq [[watcher-id watcher-fn] watchers]
-      (add-watch state-atom watcher-id watcher-fn))
-
+      (add-watch state-atom watcher-id watcher-fn)
+      (swap! (-> state-atom meta :watchers) assoc watcher-id watcher-fn))
     state-atom))
 
 ;; ────────────────────── State Access ──────────────────────
@@ -67,13 +41,15 @@
   [state-atom path]
   (get-in @state-atom path))
 
+;; ────────────────────── State Updates ──────────────────────
+
 (defn set-state!
-  "Set entire state to new value (records in history)"
+  "Set entire state to new value"
   [state-atom new-value]
   (reset! state-atom new-value))
 
 (defn update-state!
-  "Update state with function (records in history)
+  "Update state with function
    Usage: (update-state! state assoc :key value)"
   [state-atom f & args]
   (apply swap! state-atom f args))
@@ -98,98 +74,6 @@
              (dissoc state (first path))
              (update-in state (butlast path) dissoc (last path))))))
 
-;; ────────────────────── History Management ──────────────────────
-
-(defn- get-meta-atom
-  "Get metadata from state atom"
-  [state-atom key]
-  (get (meta state-atom) key))
-
-(defn- update-meta-atom!
-  "Update metadata on state atom"
-  [state-atom key f & args]
-  (alter-meta! state-atom update key #(apply f % args)))
-
-
-(defn can-undo?
-  "Check if undo is available"
-  [state-atom]
-  (and (get-meta-atom state-atom :enable-history)
-       (> (get-meta-atom state-atom :history-position) 0)))  ; Can go back if pos > 0
-
-(defn can-redo?
-  "Check if redo is available"
-  [state-atom]
-  (and (get-meta-atom state-atom :enable-history)
-       (< (get-meta-atom state-atom :history-position)
-          (dec (count (get-meta-atom state-atom :history))))))  ; Can go forward if not at end
-
-(defn undo!
-  "Undo last state change
-   Returns true if undo was performed, false otherwise
-
-   With new history model:
-   history = [state0, state1, state2, ...]
-   position points to current state
-   To undo: move position back and restore history[new_position]"
-  [state-atom]
-  (if (can-undo? state-atom)
-    (let [new-position (dec (get-meta-atom state-atom :history-position))
-          history (get-meta-atom state-atom :history)
-          previous-state (get history new-position)]
-
-      ;; Move position back
-      (alter-meta! state-atom assoc :history-position new-position)
-
-      ;; Temporarily disable history recording during undo
-      (alter-meta! state-atom assoc :recording-history false)
-      (reset! state-atom previous-state)
-      (alter-meta! state-atom assoc :recording-history true)
-
-      true)
-    false))
-
-(defn redo!
-  "Redo last undone state change
-   Returns true if redo was performed, false otherwise
-
-   With new history model:
-   To redo: move position forward and restore history[new_position]"
-  [state-atom]
-  (if (can-redo? state-atom)
-    (let [new-position (inc (get-meta-atom state-atom :history-position))
-          history (get-meta-atom state-atom :history)
-          next-state (get history new-position)]
-
-      ;; Move position forward
-      (alter-meta! state-atom assoc :history-position new-position)
-
-      ;; Temporarily disable history recording during redo
-      (alter-meta! state-atom assoc :recording-history false)
-      (reset! state-atom next-state)
-      (alter-meta! state-atom assoc :recording-history true)
-
-      true)
-    false))
-
-(defn clear-history!
-  "Clear undo/redo history, keeping only current state"
-  [state-atom]
-  (let [current-state @state-atom]
-    (alter-meta! state-atom assoc
-                 :history [current-state]
-                 :history-position 0)))
-
-(defn history-size
-  "Get current history size"
-  [state-atom]
-  (count (get-meta-atom state-atom :history)))
-
-(defn history-position
-  "Get current position in history"
-  [state-atom]
-  (get-meta-atom state-atom :history-position))
-
 ;; ────────────────────── Watchers ──────────────────────
 
 (defn add-watcher!
@@ -199,7 +83,8 @@
    Returns the state-atom for chaining"
   [state-atom watcher-id watcher-fn]
   (add-watch state-atom watcher-id watcher-fn)
-  (swap! (get-meta-atom state-atom :watchers) assoc watcher-id watcher-fn)
+  (when-let [watchers-atom (-> state-atom meta :watchers)]
+    (swap! watchers-atom assoc watcher-id watcher-fn))
   state-atom)
 
 (defn remove-watcher!
@@ -208,53 +93,18 @@
    Returns the state-atom for chaining"
   [state-atom watcher-id]
   (remove-watch state-atom watcher-id)
-  (swap! (get-meta-atom state-atom :watchers) dissoc watcher-id)
-  state-atom)
-
-(defn pause-watcher!
-  "Temporarily pause a watcher (it won't receive updates)"
-  [state-atom watcher-id]
-  (remove-watch state-atom watcher-id)
-  (swap! (get-meta-atom state-atom :paused-watchers) conj watcher-id)
-  state-atom)
-
-(defn resume-watcher!
-  "Resume a paused watcher"
-  [state-atom watcher-id]
-  (let [watchers @(get-meta-atom state-atom :watchers)
-        watcher-fn (get watchers watcher-id)]
-    (when watcher-fn
-      (add-watch state-atom watcher-id watcher-fn)
-      (swap! (get-meta-atom state-atom :paused-watchers) disj watcher-id)))
-  state-atom)
-
-(defn pause-all-watchers!
-  "Pause all watchers"
-  [state-atom]
-  (let [watchers @(get-meta-atom state-atom :watchers)]
-    (doseq [[watcher-id _] watchers]
-      (pause-watcher! state-atom watcher-id)))
-  state-atom)
-
-(defn resume-all-watchers!
-  "Resume all paused watchers"
-  [state-atom]
-  (let [paused @(get-meta-atom state-atom :paused-watchers)]
-    (doseq [watcher-id paused]
-      (resume-watcher! state-atom watcher-id)))
+  (when-let [watchers-atom (-> state-atom meta :watchers)]
+    (swap! watchers-atom dissoc watcher-id))
   state-atom)
 
 (defn list-watchers
-  "List all registered watchers"
+  "List all registered watchers (returns watcher keys)"
   [state-atom]
-  (keys @(get-meta-atom state-atom :watchers)))
+  (if-let [watchers-atom (-> state-atom meta :watchers)]
+    (keys @watchers-atom)
+    []))
 
-(defn list-paused-watchers
-  "List all paused watchers"
-  [state-atom]
-  @(get-meta-atom state-atom :paused-watchers))
-
-;; ────────────────────── Reactive Updates ──────────────────────
+;; ────────────────────── Reactive Watchers ──────────────────────
 
 (defn watch-path
   "Create a watcher that only fires when a specific path changes
@@ -305,91 +155,10 @@
         (callback old-state new-state))))
   state-atom)
 
-;; ────────────────────── Serialization ──────────────────────
-
-(defn serialize
-  "Serialize state to EDN string
-   Options:
-   - :pretty - pretty-print output (default false)
-   - :include-history - include undo/redo history (default false)"
-  [state-atom & {:keys [pretty include-history]
-                 :or {pretty false include-history false}}]
-  (let [state-value @state-atom
-        data (if include-history
-              {:state state-value
-               :history (get-meta-atom state-atom :history)
-               :history-position (get-meta-atom state-atom :history-position)}
-              state-value)
-        edn-str (pr-str data)]
-    (if pretty
-      (with-out-str
-        (clojure.pprint/pprint data))
-      edn-str)))
-
-(defn deserialize
-  "Deserialize state from EDN string
-   Returns a new state atom"
-  [edn-string & opts]
-  (let [data (edn/read-string edn-string)
-        has-history? (and (map? data) (contains? data :state))]
-    (if has-history?
-      ;; Restore with history
-      (let [state-atom (apply create-state
-                            :initial-value (:state data)
-                            opts)]
-        (alter-meta! state-atom assoc
-                     :history (:history data)
-                     :history-position (:history-position data))
-        state-atom)
-      ;; Restore without history
-      (apply create-state :initial-value data opts))))
-
-(defn save-to-file
-  "Save state to file
-   Options: same as serialize"
-  [state-atom filename & opts]
-  (spit filename (apply serialize state-atom opts)))
-
-(defn load-from-file
-  "Load state from file
-   Returns a new state atom"
-  [filename & opts]
-  (apply deserialize (slurp filename) opts))
-
-;; ────────────────────── Transactional Updates ──────────────────────
-
-(defn without-watchers
-  "Execute updates without triggering watchers
-
-   Usage:
-   (without-watchers state
-     (assoc-in-state! state [:temp :data] value))"
-  [state-atom f]
-  (pause-all-watchers! state-atom)
-  (try
-    (f)
-    (finally
-      (resume-all-watchers! state-atom))))
-
-;; ────────────────────── State Statistics ──────────────────────
-
-(defn state-info
-  "Get information about state atom"
-  [state-atom]
-  {:value @state-atom
-   :history-enabled (get-meta-atom state-atom :enable-history)
-   :history-size (history-size state-atom)
-   :history-position (history-position state-atom)
-   :history-limit (get-meta-atom state-atom :history-limit)
-   :can-undo (can-undo? state-atom)
-   :can-redo (can-redo? state-atom)
-   :watchers (list-watchers state-atom)
-   :paused-watchers (list-paused-watchers state-atom)})
-
 ;; ────────────────────── Integration with Render Loop ──────────────────────
 
 (defn create-reactive-state
-  "Create a state atom that triggers render on changes
+  "Create a state atom that triggers a callback on changes
 
    Usage:
    (create-reactive-state
@@ -419,40 +188,3 @@
       (when (not= old-state new-state)
         ((:force-render! render-control)))))
   state-atom)
-
-;; ────────────────────── Helper Macros ──────────────────────
-
-(defmacro with-state-transaction
-  "Execute multiple state updates with history recorded as single entry"
-  [state-atom & body]
-  `(let [old-state# @~state-atom]
-     (alter-meta! ~state-atom assoc :recording-history false)
-     (try
-       ~@body
-       (finally
-         ;; Manually record the combined change as one history entry
-         (let [new-state# @~state-atom]
-           (when (not= old-state# new-state#)
-             (let [history-limit# (get (meta ~state-atom) :history-limit)
-                   current-pos# (get (meta ~state-atom) :history-position)
-                   current-history# (get (meta ~state-atom) :history)
-                   ;; Trim future history and add new state
-                   trimmed-history# (vec (take (inc current-pos#) current-history#))
-                   new-history# (conj trimmed-history# new-state#)
-                   final-history# (if (> (count new-history#) history-limit#)
-                                   (vec (take-last history-limit# new-history#))
-                                   new-history#)
-                   new-position# (dec (count final-history#))]
-               (alter-meta! ~state-atom assoc
-                           :history final-history#
-                           :history-position new-position#))))
-         (alter-meta! ~state-atom assoc :recording-history true)))))
-
-(defmacro when-state-changed
-  "Execute body only if state actually changed"
-  [state-atom update-expr & body]
-  `(let [old-val# @~state-atom
-         new-val# ~update-expr]
-     (when (not= old-val# new-val#)
-       ~@body
-       new-val#)))

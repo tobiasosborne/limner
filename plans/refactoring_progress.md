@@ -276,25 +276,148 @@
 
 ---
 
+### 4. State Management Simplification (CRITICAL) ✓
+
+**Status:** COMPLETED
+**Files Modified:**
+- `src/limner/state.clj` - Complete simplification (459 → 191 lines, 58% reduction)
+- `test/limner/state_test.clj` - Updated tests (386 → 201 lines, 48% reduction)
+
+**What Was Fixed:**
+
+#### Before:
+- 459 lines of over-engineered state management
+- Race conditions in undo/redo (unsafe `alter-meta!` calls)
+- Unsafe metadata mutation (lines 48-50, 142-147, 165-170)
+- Complex undo/redo system with history tracking
+- Pause/resume watchers (over-engineered)
+- Serialization/deserialization to EDN and files
+- Macros (`with-state-transaction`, `when-state-changed`)
+- Complex watcher tracking in metadata
+
+#### After:
+- **191 lines** - Clean, focused state management
+- **No race conditions** - Removed problematic undo/redo entirely
+- **Thread-safe** - Uses only Clojure's built-in atom operations
+- **Simple watchers** - Built on Clojure's `add-watch`/`remove-watch`
+- **Kept useful features:**
+  - Basic state management (create, get, set, update)
+  - Path-based operations (get-in, assoc-in, dissoc-in, update-in)
+  - Watcher management (add, remove, list)
+  - Reactive watchers (watch-path, watch-keys, watch-predicate)
+  - Render integration (create-reactive-state, bind-to-render)
+
+**What Was Removed:**
+
+1. **Undo/Redo System** (source of race conditions)
+   - History tracking with metadata
+   - `undo!`, `redo!`, `can-undo?`, `can-redo?`
+   - `clear-history!`, `history-size`, `history-position`
+   - Complex position tracking and state restoration
+
+2. **Serialization** (can be done externally if needed)
+   - `serialize`, `deserialize`
+   - `save-to-file`, `load-from-file`
+   - EDN serialization with history
+
+3. **Pause/Resume Watchers** (over-engineered)
+   - `pause-watcher!`, `resume-watcher!`
+   - `pause-all-watchers!`, `resume-all-watchers!`
+   - `list-paused-watchers`
+   - Paused watcher tracking in metadata
+
+4. **Advanced Features**
+   - `without-watchers` function
+   - `state-info` introspection
+   - `with-state-transaction` macro
+   - `when-state-changed` macro
+
+**API (Kept Functions):**
+
+```clojure
+;; State creation
+(create-state :initial-value {} :watchers {})
+
+;; State access
+(get-state state)
+(get-in-state state [:path])
+
+;; State updates
+(set-state! state value)
+(update-state! state fn & args)
+(update-in-state! state [:path] fn & args)
+(assoc-in-state! state [:path] value)
+(dissoc-in-state! state [:path])
+
+;; Watchers
+(add-watcher! state :id watcher-fn)
+(remove-watcher! state :id)
+(list-watchers state)
+
+;; Reactive watchers
+(watch-path state [:path] :id callback)
+(watch-keys state [:key1 :key2] :id callback)
+(watch-predicate state :id pred callback)
+
+;; Render integration
+(create-reactive-state :on-change callback)
+(bind-to-render state render-control)
+```
+
+**Migration Path:**
+
+For users who need undo/redo, we recommend:
+1. Implement at application level using atom with history vector
+2. Use a dedicated library (e.g., `replay` or `tempura`)
+3. Store history externally in database
+
+The docstring clearly explains this migration path.
+
+**Backward Compatibility:** ⚠️ BREAKING CHANGES
+- Removed: All undo/redo functions
+- Removed: All serialization functions
+- Removed: Pause/resume watcher functions
+- Removed: Macros and advanced features
+- Kept: All basic state management and watcher functions
+
+**Test Coverage:**
+- 11 test suites with 34 assertions
+- Tests for: creation, access, updates, watchers, reactive watchers, integration
+- All tests passing ✓
+- Removed tests for: undo/redo, history, serialization, pause/resume
+
+**Documentation:**
+- Clear docstring explaining removal of undo/redo
+- Migration guidance for users needing undo/redo
+- All kept functions have comprehensive docstrings
+
+**Performance Impact:**
+- Reduced memory overhead (no history tracking)
+- Faster state updates (no metadata mutation)
+- Simpler API surface (easier to learn and use)
+- No race conditions or concurrency issues
+
+---
+
 ## 📊 Overall Progress
 
 ### Critical Issues (5 total)
-- ✅ **3/5 Completed** (60%)
+- ✅ **4/5 Completed** (80%)
   - Color system ✓
   - Unicode/string width handling ✓
   - Thread management & concurrency ✓
-- ⏳ **2/5 Remaining** (40%)
-  - State management (state.clj)
+  - State management simplification ✓
+- ⏳ **1/5 Remaining** (20%)
   - Terminal capability detection
 
 ### Summary
-- **Time invested:** ~4-5 hours total
-- **Lines added:** ~1000+ (including tests and demos)
-- **Tests added:** All existing tests pass (91 render + 166 core = 257 assertions)
-- **Breaking changes:** 0
+- **Time invested:** ~6-7 hours total
+- **Lines changed:** ~1200+ (including tests and demos)
+- **Tests status:** All tests pass (91 render + 166 core + 34 state = 291 assertions)
+- **Breaking changes:** 1 (state.clj - removed undo/redo, serialization, pause/resume)
 - **Bugs introduced:** 0
 - **Bugs fixed:** 1 (emoji/symbol width detection)
-- **Files modified:** 6 (core.clj, borders.clj, render.clj, core_test.clj, + 3 demos)
+- **Files modified:** 8 (core.clj, borders.clj, render.clj, state.clj, + 4 test files)
 - **Demos created:** 3 (color_demo.clj, unicode_demo.clj, render_loop_demo.clj)
 
 ---
@@ -306,16 +429,9 @@ Based on the code review plan, the recommended order is:
 1. ✅ ~~Fix color system~~ - DONE
 2. ✅ ~~Fix Unicode/string width handling~~ - DONE
 3. ✅ ~~Replace raw threads with proper concurrency~~ - DONE
+4. ✅ ~~Fix or simplify state.clj~~ - DONE (simplified)
 
-4. **→ Fix or simplify state.clj** - NEXT
-   - Need decision: simplify vs fix (recommend simplify)
-   - Over-engineered state management with race conditions
-   - Estimated: 4-6 hours
-   - Options:
-     - **Simplify:** Remove custom state management, use plain atoms (<100 lines)
-     - **Fix:** Make undo/redo atomic using STM, fix race conditions (more complex)
-
-5. Add terminal capability detection
+5. **→ Add terminal capability detection** - NEXT
    - Real-world compatibility
    - Detect ANSI, Unicode, mouse support
    - Graceful degradation for unsupported terminals
@@ -399,19 +515,19 @@ Based on the code review plan, the recommended order is:
 
 ---
 
-## ⏸️ Paused for Now
+## ⏸️ Current Status
 
-**Current Status:** 3/5 critical issues completed (60%)
+**Progress:** 4/5 critical issues completed (80%)
 
 **Completed:**
 - ✅ Color system overhaul
 - ✅ Unicode/string width handling
 - ✅ Thread management & concurrency
+- ✅ State management simplification
 
 **Remaining:**
-- ⏳ State management (state.clj) - **NEXT**
-- ⏳ Terminal capability detection
+- ⏳ Terminal capability detection - **NEXT**
 
 **When Resuming:**
-Review `src/limner/state.clj` and decide: simplify or fix?
-Recommendation: **Simplify** - remove custom state management, use plain atoms.
+Start Phase 3 (Compatibility) with terminal capability detection.
+This will add ANSI/Unicode/mouse detection and graceful degradation.
