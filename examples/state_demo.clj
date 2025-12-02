@@ -1,7 +1,7 @@
 #!/usr/bin/env bb
 
 (ns state-demo
-  "Demonstration of state management with undo/redo and watchers"
+  "Demonstration of simplified state management with watchers"
   (:require [limner.state :as state]
             [limner.core :as core]))
 
@@ -21,38 +21,6 @@
     ;; Update nested path
     (state/assoc-in-state! s [:user :email] "demo@example.com")
     (println "After nested update:" @s)))
-
-;; ────────────────────── Undo/Redo Demo ──────────────────────
-
-(defn undo-redo-demo []
-  (println (core/color :cyan "\n=== Undo/Redo System ==="))
-
-  (let [s (state/create-state :initial-value {:counter 0})]
-    (println "Starting value:" (:counter @s))
-
-    ;; Make several changes
-    (doseq [i (range 1 6)]
-      (state/update-state! s assoc :counter i)
-      (println (str "  Step " i ": " (:counter @s))))
-
-    ;; Undo a few times
-    (println "\nUndoing...")
-    (dotimes [_ 3]
-      (state/undo! s)
-      (println "  After undo: " (:counter @s)))
-
-    ;; Redo
-    (println "\nRedoing...")
-    (dotimes [_ 2]
-      (state/redo! s)
-      (println "  After redo: " (:counter @s)))
-
-    ;; Show history info
-    (println "\nHistory info:")
-    (println "  Can undo?" (state/can-undo? s))
-    (println "  Can redo?" (state/can-redo? s))
-    (println "  History size:" (state/history-size s))
-    (println "  Position:" (state/history-position s))))
 
 ;; ────────────────────── Watchers Demo ──────────────────────
 
@@ -91,30 +59,6 @@
 
     (println (str "\nTotal watcher notifications: " (count @changes)))))
 
-;; ────────────────────── Serialization Demo ──────────────────────
-
-(defn serialization-demo []
-  (println (core/color :cyan "\n=== State Serialization ==="))
-
-  (let [s (state/create-state :initial-value {:game "Demo" :highscore 1000})]
-    ;; Make some changes
-    (state/update-state! s assoc :highscore 1500)
-    (state/update-state! s assoc :highscore 2000)
-
-    ;; Serialize
-    (let [serialized (state/serialize s :include-history true)]
-      (println "Serialized state:")
-      (println (subs serialized 0 (min 100 (count serialized))) "...")
-
-      ;; Deserialize
-      (let [restored (state/deserialize serialized)]
-        (println "\nRestored state:" @restored)
-        (println "Can undo in restored?" (state/can-undo? restored))
-
-        ;; Test undo on restored state
-        (state/undo! restored)
-        (println "After undo:" @restored)))))
-
 ;; ────────────────────── Reactive State Demo ──────────────────────
 
 (defn reactive-demo []
@@ -136,6 +80,89 @@
 
     (println (str "\nTotal renders: " @render-count))))
 
+;; ────────────────────── Watch Keys Demo ──────────────────────
+
+(defn watch-keys-demo []
+  (println (core/color :cyan "\n=== Watch Multiple Keys ==="))
+
+  (let [s (state/create-state :initial-value {:name "Alice" :email "alice@example.com" :age 30})
+        notifications (atom [])]
+
+    (state/watch-keys s [:name :email] :contact-watcher
+      (fn [changed-keys _ _]
+        (swap! notifications conj changed-keys)
+        (println (str "  Contact info changed: " (pr-str changed-keys)))))
+
+    (println "\nUpdating name...")
+    (state/update-state! s assoc :name "Bob")
+
+    (println "\nUpdating age (not watched)...")
+    (state/update-state! s assoc :age 31)
+
+    (println "\nUpdating email...")
+    (state/update-state! s assoc :email "bob@example.com")
+
+    (println (str "\nTotal notifications: " (count @notifications)))))
+
+;; ────────────────────── Application-Level Undo Demo ──────────────────────
+
+(defn undo-demo []
+  (println (core/color :cyan "\n=== Application-Level Undo/Redo ==="))
+  (println "Note: Undo/redo removed from state.clj due to race conditions.")
+  (println "Here's how to implement it at the application level:\n")
+
+  ;; Simple application-level undo/redo
+  (let [history (atom {:past [] :present {:count 0} :future []})
+
+        push-state! (fn [new-state]
+                     (swap! history
+                            (fn [h]
+                              {:past (conj (:past h) (:present h))
+                               :present new-state
+                               :future []})))
+
+        undo! (fn []
+               (when (seq (:past @history))
+                 (swap! history
+                        (fn [h]
+                          {:past (pop (:past h))
+                           :present (peek (:past h))
+                           :future (conj (:future h) (:present h))}))))
+
+        redo! (fn []
+               (when (seq (:future @history))
+                 (swap! history
+                        (fn [h]
+                          {:past (conj (:past h) (:present h))
+                           :present (first (:future h))
+                           :future (rest (:future h))}))))]
+
+    (println "Initial:" (:present @history))
+
+    ;; Make changes
+    (push-state! {:count 1})
+    (println "After change 1:" (:present @history))
+
+    (push-state! {:count 2})
+    (println "After change 2:" (:present @history))
+
+    (push-state! {:count 3})
+    (println "After change 3:" (:present @history))
+
+    ;; Undo
+    (println "\nUndoing...")
+    (undo!)
+    (println "After undo:" (:present @history))
+    (undo!)
+    (println "After undo:" (:present @history))
+
+    ;; Redo
+    (println "\nRedoing...")
+    (redo!)
+    (println "After redo:" (:present @history))
+
+    (println "\n✓ Simple, thread-safe, no race conditions!")))
+
 ;; ────────────────────── Main Entry Point ──────────────────────
 
 (defn -main []
@@ -144,10 +171,10 @@
   (println (core/color :bold "╚══════════════════════════════════════╝"))
 
   (basic-demo)
-  (undo-redo-demo)
   (watchers-demo)
-  (serialization-demo)
   (reactive-demo)
+  (watch-keys-demo)
+  (undo-demo)
 
   (println (core/color :green "\n✓ Demo complete!\n")))
 
