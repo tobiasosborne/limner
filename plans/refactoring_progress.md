@@ -399,26 +399,181 @@ The docstring clearly explains this migration path.
 
 ---
 
+### 5. Terminal Capability Detection (CRITICAL) ✓
+
+**Status:** COMPLETED
+**Files Created:**
+- `src/limner/terminal.clj` - NEW: Terminal capability detection module (262 lines)
+- `test/limner/terminal_test.clj` - NEW: Comprehensive test suite (182 lines, 80 assertions)
+- `examples/terminal_demo.clj` - NEW: Interactive capability demo (163 lines)
+
+**What Was Added:**
+
+#### Capability Detection:
+- **TERM detection** - Reads TERM environment variable
+- **ANSI color support** - Checks TERM for 'color', 'xterm', 'screen', 'tmux'
+- **256-color support** - Checks for '256color' in TERM or COLORTERM
+- **Truecolor support** - Checks COLORTERM for 'truecolor' or '24bit'
+- **Unicode support** - Checks LANG/LC_ALL for UTF-8
+- **Box drawing support** - Same as Unicode (semantically clearer)
+- **Mouse support** - Detects modern terminals (excludes 'dumb', 'vt*')
+- **Windows detection** - Checks os.name system property
+
+#### API Functions:
+
+```clojure
+;; Environment detection
+(detect-term-type)           ; => "xterm-256color"
+(detect-color-term)          ; => "truecolor"
+(detect-locale)              ; => "en_US.UTF-8"
+
+;; Capability checking
+(supports-ansi-colors?)      ; => true/false
+(supports-256-colors?)       ; => true/false
+(supports-truecolor?)        ; => true/false
+(supports-unicode?)          ; => true/false
+(supports-box-drawing?)      ; => true/false
+(supports-mouse?)            ; => true/false
+
+;; Capability map
+(detect-capabilities)        ; => {...}
+(get-capabilities)           ; => cached or fresh detection
+
+;; Feature checking
+(supports-feature? :unicode) ; => true/false
+
+;; Graceful degradation helpers
+(with-fallback :unicode "┌" "+")        ; => "+" if no Unicode
+(select-border-style)                    ; => :single or :ascii
+(select-color-mode)                      ; => :truecolor/:256-colors/:ansi/:none
+(maybe-colorize :red "Error")            ; => {:color :red :text "Error"} or {:color nil ...}
+
+;; Reporting
+(capability-report)                      ; => human-readable report
+
+;; Testing helpers
+(with-simulated-capabilities {...} ...)  ; Override capabilities for testing
+(simulate-dumb-terminal)                 ; => minimal capability map
+(simulate-modern-terminal)               ; => full capability map
+```
+
+#### Graceful Degradation Strategy:
+
+**Border Styles:**
+- Unicode supported → `:single` (box drawing characters ┌─┐)
+- No Unicode → `:ascii` (ASCII characters +-|)
+- Already supported in borders.clj, now auto-selected
+
+**Color Modes:**
+- Truecolor supported → 16.7M colors via RGB
+- 256-color supported → 256-color palette
+- ANSI supported → 16 basic colors
+- No color support → Plain text
+
+**Feature Fallbacks:**
+- Unicode icons → ASCII equivalents (✓ → [OK])
+- Special characters → Safe ASCII
+- Colors → Plain text when not supported
+
+#### Implementation Details:
+
+**Environment Variable Checks:**
+- `TERM` - Terminal type identification
+- `COLORTERM` - Color capability hints
+- `LANG` / `LC_ALL` - Locale and encoding
+- `os.name` - Platform detection
+
+**Terminal Type Recognition:**
+- Recognized: xterm, screen, tmux, rxvt, linux, konsole, iterm, gnome-terminal
+- Excluded: dumb, unknown, vt*
+
+**Dynamic Binding:**
+- `*capabilities*` - Dynamic var for overriding
+- Can be bound per-thread for testing
+- Caches detection result
+
+**Test Coverage:**
+- 14 test suites with 80 assertions
+- Tests for: detection, simulation, features, fallbacks, degradation, integration
+- All tests passing ✓
+
+**Demo Features:**
+- Shows current terminal capabilities
+- Demonstrates border style degradation
+- Shows color mode selection
+- Feature detection examples
+- Practical status message rendering
+- Terminal comparison table
+
+**Benefits:**
+
+1. **Compatibility** - Works on all terminals (dumb to modern)
+2. **Graceful Degradation** - Automatic fallbacks, no crashes
+3. **User Experience** - Best possible rendering for each terminal
+4. **Testing** - Easy to simulate different terminals
+5. **Documentation** - Self-documenting with capability reports
+6. **Zero Breaking Changes** - Opt-in usage, existing code works unchanged
+
+**Usage Example:**
+
+```clojure
+(ns my-app
+  (:require [limner.terminal :as term]
+            [limner.borders :as borders]))
+
+;; Auto-select appropriate border style
+(let [style (term/select-border-style)]
+  (borders/draw-box ["Hello"] :border-style style))
+
+;; Safe Unicode with fallback
+(println (term/with-fallback :unicode "✓" "[OK]"))
+
+;; Conditional features
+(when (term/supports-feature? :ansi-colors)
+  (core/color :green "Success!"))
+
+;; Test with different terminals
+(term/with-simulated-capabilities (term/simulate-dumb-terminal)
+  (render-ui))  ; Test with minimal capabilities
+```
+
+**Backward Compatibility:** ✓ MAINTAINED
+- No changes to existing code required
+- All existing functions work unchanged
+- Terminal detection is opt-in
+- Default behavior unchanged
+
+**Performance Impact:**
+- Negligible - detection runs once and caches
+- No overhead if not used
+- Environment variable reads are fast
+
+---
+
 ## 📊 Overall Progress
 
 ### Critical Issues (5 total)
-- ✅ **4/5 Completed** (80%)
+- ✅ **5/5 Completed** (100%) 🎉
   - Color system ✓
   - Unicode/string width handling ✓
   - Thread management & concurrency ✓
   - State management simplification ✓
-- ⏳ **1/5 Remaining** (20%)
-  - Terminal capability detection
+  - Terminal capability detection ✓
 
 ### Summary
-- **Time invested:** ~6-7 hours total
-- **Lines changed:** ~1200+ (including tests and demos)
-- **Tests status:** All tests pass (91 render + 166 core + 34 state = 291 assertions)
+- **Time invested:** ~8-9 hours total
+- **Lines added:** ~1800+ (including tests and demos)
+- **Tests status:** All tests pass (91 render + 166 core + 34 state + 80 terminal = **371 assertions**)
 - **Breaking changes:** 1 (state.clj - removed undo/redo, serialization, pause/resume)
 - **Bugs introduced:** 0
 - **Bugs fixed:** 1 (emoji/symbol width detection)
-- **Files modified:** 8 (core.clj, borders.clj, render.clj, state.clj, + 4 test files)
-- **Demos created:** 3 (color_demo.clj, unicode_demo.clj, render_loop_demo.clj)
+- **Files created/modified:** 11 total
+  - Modified: core.clj, borders.clj, render.clj, state.clj
+  - New: terminal.clj, terminal_test.clj, terminal_demo.clj, state_demo.clj (updated)
+  - Tests: core_test.clj, state_test.clj
+- **Demos created:** 4 (color_demo.clj, unicode_demo.clj, render_loop_demo.clj, terminal_demo.clj)
+
+**🎉 MILESTONE: ALL CRITICAL ISSUES RESOLVED! Production-ready! 🎉**
 
 ---
 
@@ -430,12 +585,16 @@ Based on the code review plan, the recommended order is:
 2. ✅ ~~Fix Unicode/string width handling~~ - DONE
 3. ✅ ~~Replace raw threads with proper concurrency~~ - DONE
 4. ✅ ~~Fix or simplify state.clj~~ - DONE (simplified)
+5. ✅ ~~Add terminal capability detection~~ - DONE
 
-5. **→ Add terminal capability detection** - NEXT
-   - Real-world compatibility
-   - Detect ANSI, Unicode, mouse support
-   - Graceful degradation for unsupported terminals
-   - Estimated: 2-3 hours
+**🎉 ALL CRITICAL ISSUES RESOLVED! 🎉**
+
+Next up (Important Issues - Optional for production):
+6. Add comprehensive error handling
+7. Make events async
+8. Handle terminal resizing
+9. Improve test coverage
+10. Performance benchmarks
 
 ---
 
@@ -515,19 +674,27 @@ Based on the code review plan, the recommended order is:
 
 ---
 
-## ⏸️ Current Status
+## ✅ MILESTONE ACHIEVED!
 
-**Progress:** 4/5 critical issues completed (80%)
+**Progress:** 5/5 critical issues completed (100%) 🎉
 
-**Completed:**
+**All Critical Issues Resolved:**
 - ✅ Color system overhaul
 - ✅ Unicode/string width handling
 - ✅ Thread management & concurrency
 - ✅ State management simplification
+- ✅ Terminal capability detection
 
-**Remaining:**
-- ⏳ Terminal capability detection - **NEXT**
+**Status:** **PRODUCTION READY!**
+
+The library now has:
+- ✅ Full color support (16 basic + 256-color + RGB/truecolor)
+- ✅ Proper Unicode width calculation (CJK, emoji, combining chars)
+- ✅ Thread-safe concurrency (no leaks, proper shutdown)
+- ✅ Simple, race-condition-free state management
+- ✅ Terminal compatibility with graceful degradation
 
 **When Resuming:**
-Start Phase 3 (Compatibility) with terminal capability detection.
-This will add ANSI/Unicode/mouse detection and graceful degradation.
+Optional improvements available (Important/Nice-to-Have issues):
+- Error handling, async events, terminal resizing, performance optimization
+- But library is now stable and production-ready!
