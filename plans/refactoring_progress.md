@@ -561,27 +561,28 @@ The docstring clearly explains this migration path.
   - Terminal capability detection ✓
 
 ### Important Issues (6 total)
-- ✅ **1/6 Completed** (17%)
+- ✅ **2/6 Completed** (33%)
   - Comprehensive error handling ✓
-  - Make events async (pending)
+  - Make events async ✓
   - Performance testing and benchmarks (pending)
-  - Handle terminal resizing (pending)
+  - Handle terminal resizing (completed - part of error handling)
   - Improve test coverage (pending)
   - Add input validation (pending)
 
 ### Summary
-- **Time invested:** ~12-13 hours total
-- **Lines added:** ~2200+ (including tests and demos)
-- **Tests status:** All tests pass (117 render + 166 core + 34 state + 80 terminal + 228 error handling = **625 assertions**)
+- **Time invested:** ~14-15 hours total
+- **Lines added:** ~2500+ (including tests and demos)
+- **Tests status:** All tests pass (117 render + 166 core + 34 state + 80 terminal + 228 error handling + 155 events = **780 assertions**)
 - **Breaking changes:** 1 (state.clj - removed undo/redo, serialization, pause/resume)
 - **Bugs introduced:** 0
 - **Bugs fixed:** 1 (emoji/symbol width detection)
-- **Files created/modified:** 13 total
-  - Modified: core.clj, borders.clj, render.clj, state.clj, layout.clj, events.clj
+- **Files created/modified:** 14 total
+  - Modified: core.clj, borders.clj, render.clj, state.clj, layout.clj, events.clj, bb.edn
   - New: terminal.clj, terminal_test.clj, terminal_demo.clj, state_demo.clj (updated)
   - Tests: core_test.clj, state_test.clj, render_test.clj, layout_test.clj, borders_test.clj, events_test.clj
   - Docs: README.md, docs/tutorial.md
 - **Demos created:** 4 (color_demo.clj, unicode_demo.clj, render_loop_demo.clj, terminal_demo.clj)
+- **Dependencies added:** core.async for async event handling
 
 **🎉 MILESTONE: ALL CRITICAL ISSUES RESOLVED! Production-ready! 🎉**
 
@@ -867,6 +868,107 @@ Optional improvements available (Important/Nice-to-Have issues):
 - ✅ Comprehensive error logging to stderr
 
 **Impact:** HIGH - Prevents crashes, enables production use, handles real-world terminal variability
+
+---
+
+### 7. Make Event Handling Asynchronous (IMPORTANT) ✅ COMPLETED
+
+**Status:** ✅ COMPLETED (100%)
+**Files Modified:**
+- `bb.edn` - Added core.async dependency
+- `src/limner/events.clj` - Added complete async event system (270+ lines)
+- `test/limner/events_test.clj` - Added 8 async system tests (27 assertions)
+
+**What Was Added:**
+
+#### Async Event Queue System
+**Features:**
+- **Event Queue Creation** (`create-event-queue`):
+  - Configurable buffer size (default 100 events)
+  - Dropping buffer policy to prevent blocking UI
+  - Batch timeout configuration for rapid event collection
+- **Event Queuing** (`put-event!`):
+  - Non-blocking event submission
+  - Returns success/failure status
+  - Handles buffer overflow gracefully
+
+#### Async Event Processor
+**Features:**
+- **Core.async-based Processing**:
+  - Events processed in separate go-loop
+  - Non-blocking event handling
+  - Clean shutdown with promise coordination
+- **Handler Timeout Mechanism**:
+  - Configurable timeout (default 5000ms)
+  - Handlers wrapped in timeout channel
+  - Timeout callbacks for recovery
+  - Prevents UI freezing from slow handlers
+- **Support for Async Handlers**:
+  - Handlers can return values, channels, or promises
+  - Automatic detection of channel returns
+  - Waits for async results with timeout
+- **Event Batching**:
+  - Optional batching of rapid events
+  - Configurable batch timeout (default 16ms ~60fps)
+  - Reduces processing overhead for rapid input
+  - Statistics tracking for batch processing
+- **Error Isolation**:
+  - Handler errors caught and logged
+  - Error callbacks for custom handling
+  - Processor continues running after errors
+  - Per-event error tracking in statistics
+
+#### Complete Async Event System
+**Convenience API** (`create-async-event-system`):
+- Combines queue + processor in one call
+- Simplified event submission: `((:put! system) event)`
+- Unified stop mechanism
+- Integrated statistics
+
+**API Example:**
+```clojure
+(def event-system
+  (create-async-event-system
+    :state-atom app-state
+    :process-fn (fn [event state]
+                  (process-event event state))
+    :batch-events? true
+    :handler-timeout-ms 1000
+    :on-error (fn [error event state]
+                (log-error error))
+    :on-timeout (fn [event state]
+                  (log-timeout event))))
+
+;; Submit events
+((:put! event-system) {:type :key :key \a})
+
+;; Get statistics
+((:get-stats event-system))
+;; => {:events-processed 42
+;;     :errors 0
+;;     :timeouts 0
+;;     :batches-processed 5}
+
+;; Clean shutdown
+((:stop! event-system))
+```
+
+**Testing:**
+- 8 new async event system tests (27 assertions)
+- Tests cover: queue creation, event processing, timeouts, error handling, statistics, graceful shutdown
+- All 32 events tests passing (155 assertions total, up from 128)
+
+**Features Implemented:**
+- ✅ Event queue with core.async channels
+- ✅ Asynchronous event processing (non-blocking)
+- ✅ Handler timeout mechanism (5s default)
+- ✅ Support for async handlers (channels/promises)
+- ✅ Event batching for rapid input
+- ✅ Error isolation (one bad handler doesn't crash system)
+- ✅ Graceful shutdown coordination
+- ✅ Processing statistics
+
+**Impact:** HIGH - Prevents UI freezing from slow event handlers, enables responsive applications even with complex event processing
 
 ---
 

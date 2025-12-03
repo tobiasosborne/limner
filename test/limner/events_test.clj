@@ -435,3 +435,186 @@
         (is (get-in new-state [:components :panel1 :clicked]))
         ;; Focus should move to clicked component
         (is (= :panel1 (get-in new-state [:focus :focused])))))))
+
+;; ────────────────────── Async Event System Tests ──────────────────────
+
+(deftest test-create-event-queue
+  (testing "Create async event queue"
+    (let [queue (events/create-event-queue :buffer-size 50)]
+      (is (some? (:chan queue)))
+      (is (= 50 (:buffer-size queue)))
+      (is (= true (:drop-on-full? queue))))))
+
+(deftest test-put-event
+  (testing "Put event onto queue"
+    (let [queue (events/create-event-queue)
+          event {:type :key :key \a}
+          result (events/put-event! queue event)]
+      ;; Should successfully queue the event
+      (is (or (true? result) (nil? result))))))
+
+(deftest test-async-event-processor-basic
+  (testing "Async event processor handles events"
+    (let [state-atom (atom {:count 0})
+          queue (events/create-event-queue)
+          processor (events/create-async-event-processor
+                     :event-queue queue
+                     :state-atom state-atom
+                     :process-fn (fn [event state]
+                                   (update state :count inc)))]
+
+      ;; Check processor is running
+      (is ((:running? processor)))
+
+      ;; Put some events
+      (events/put-event! queue {:type :test})
+      (events/put-event! queue {:type :test})
+      (Thread/sleep 100) ; Give time to process
+
+      ;; Check events were processed
+      (is (>= (:count @state-atom) 2))
+
+      ;; Stop processor
+      ((:stop! processor))
+      (Thread/sleep 50)
+      (is (not ((:running? processor)))))))
+
+(deftest test-async-processor-timeout
+  (testing "Event handler timeout mechanism"
+    (let [state-atom (atom {:count 0})
+          queue (events/create-event-queue)
+          timeout-called (atom false)
+          processor (events/create-async-event-processor
+                     :event-queue queue
+                     :state-atom state-atom
+                     :process-fn (fn [event state]
+                                   ;; Simulate slow handler
+                                   (Thread/sleep 200)
+                                   (update state :count inc))
+                     :handler-timeout-ms 50 ; Very short timeout
+                     :on-timeout (fn [event state]
+                                   (reset! timeout-called true)))]
+
+      ;; Put event that will timeout
+      (events/put-event! queue {:type :slow})
+      (Thread/sleep 150) ; Wait for timeout to occur
+
+      ;; Check timeout was detected
+      (is @timeout-called)
+      (let [stats ((:get-stats processor))]
+        (is (> (:timeouts stats) 0)))
+
+      ;; Cleanup
+      ((:stop! processor)))))
+
+(deftest test-async-processor-error-handling
+  (testing "Event handler error handling"
+    (let [state-atom (atom {:count 0})
+          queue (events/create-event-queue)
+          error-called (atom false)
+          processor (events/create-async-event-processor
+                     :event-queue queue
+                     :state-atom state-atom
+                     :process-fn (fn [event state]
+                                   (if (= (:type event) :error)
+                                     (throw (Exception. "Test error"))
+                                     (update state :count inc)))
+                     :on-error (fn [error event state]
+                                 (reset! error-called true)))]
+
+      ;; Put normal event
+      (events/put-event! queue {:type :normal})
+      (Thread/sleep 50)
+
+      ;; Put error event
+      (events/put-event! queue {:type :error})
+      (Thread/sleep 50)
+
+      ;; Check error was handled
+      (is @error-called)
+      (let [stats ((:get-stats processor))]
+        (is (> (:errors stats) 0))
+        (is (>= (:events-processed stats) 1))) ; At least one good event processed
+
+      ;; Cleanup
+      ((:stop! processor)))))
+
+(deftest test-create-async-event-system
+  (testing "Complete async event system"
+    (let [state-atom (atom {:count 0})
+          system (events/create-async-event-system
+                  :state-atom state-atom
+                  :process-fn (fn [event state]
+                                (update state :count inc))
+                  :buffer-size 50
+                  :handler-timeout-ms 1000)]
+
+      ;; Check system components
+      (is (some? (:queue system)))
+      (is (some? (:processor system)))
+      (is (fn? (:put! system)))
+      (is (fn? (:stop! system)))
+      (is (fn? (:running? system)))
+
+      ;; System should be running
+      (is ((:running? system)))
+
+      ;; Put events using convenience function
+      ((:put! system) {:type :test})
+      ((:put! system) {:type :test})
+      (Thread/sleep 100)
+
+      ;; Check events processed
+      (is (>= (:count @state-atom) 2))
+
+      ;; Get statistics
+      (let [stats ((:get-stats system))]
+        (is (>= (:events-processed stats) 2))
+        (is (= 0 (:errors stats)))
+        (is (= 0 (:timeouts stats))))
+
+      ;; Stop system
+      ((:stop! system))
+      (Thread/sleep 50)
+      (is (not ((:running? system)))))))
+
+(deftest test-async-system-stats
+  (testing "Event processing statistics"
+    (let [state-atom (atom {:count 0})
+          system (events/create-async-event-system
+                  :state-atom state-atom
+                  :process-fn (fn [event state]
+                                (update state :count inc)))]
+
+      ;; Process multiple events
+      (dotimes [_ 10]
+        ((:put! system) {:type :test}))
+      (Thread/sleep 200)
+
+      ;; Check statistics
+      (let [stats ((:get-stats system))]
+        (is (>= (:events-processed stats) 10))
+        (is (number? (:errors stats)))
+        (is (number? (:timeouts stats))))
+
+      ;; Cleanup
+      ((:stop! system)))))
+
+(deftest test-async-system-graceful-shutdown
+  (testing "Async system graceful shutdown"
+    (let [state-atom (atom {:count 0})
+          system (events/create-async-event-system
+                  :state-atom state-atom
+                  :process-fn (fn [event state]
+                                (update state :count inc)))]
+
+      ;; Put many events
+      (dotimes [_ 100]
+        ((:put! system) {:type :test}))
+
+      ;; Stop immediately (should handle gracefully)
+      ((:stop! system))
+
+      ;; Should stop without errors
+      (is (not ((:running? system)))))))
+

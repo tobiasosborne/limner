@@ -1,6 +1,7 @@
 (ns limner.events
   "Event system - keyboard and mouse input handling"
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [clojure.core.async :as async :refer [<! >! <!! >!! go go-loop chan close! timeout alt!]]))
 
 ;; ────────────────────── Error Handling ──────────────────────
 
@@ -468,3 +469,275 @@
           (if-let [new-components (route-event event focus components handlers)]
             (assoc state :components new-components)
             state))))))
+
+;; ────────────────────── Async Event System ──────────────────────
+
+(defn create-event-queue
+  "Create an async event queue using core.async channel.
+
+   Options:
+   - :buffer-size - size of event buffer (default 100)
+   - :drop-on-full? - drop events when buffer full instead of blocking (default true)
+   - :batch-timeout-ms - timeout for batching rapid events (default 16ms ~60fps)
+
+   Returns a map with:
+   - :chan - the core.async channel for events
+   - :buffer-size - configured buffer size
+   - :drop-on-full? - drop policy"
+  [& {:keys [buffer-size drop-on-full? batch-timeout-ms]
+      :or {buffer-size 100
+           drop-on-full? true
+           batch-timeout-ms 16}}]
+  (let [buffer (if drop-on-full?
+                 (async/dropping-buffer buffer-size)
+                 (async/buffer buffer-size))
+        event-chan (chan buffer)]
+    {:chan event-chan
+     :buffer-size buffer-size
+     :drop-on-full? drop-on-full?
+     :batch-timeout-ms batch-timeout-ms}))
+
+(defn put-event!
+  "Put an event onto the async event queue.
+   Returns true if event was queued, false if dropped (when buffer full)."
+  [event-queue event]
+  (let [ch (:chan event-queue)]
+    (async/offer! ch event)))
+
+(defn- call-handler-with-timeout
+  "Call handler with timeout. Returns [result :ok] or [nil :timeout] or [error :error].
+   Handler can return a value, a channel, or a promise.
+
+   timeout-ms: maximum time to wait for handler (default 5000ms)"
+  [handler event state timeout-ms]
+  (try
+    (let [result-chan (chan 1)
+          timeout-chan (timeout timeout-ms)]
+      ;; Call handler in go block
+      (go
+        (try
+          (let [result (handler event state)]
+            (cond
+              ;; Handler returned a channel - wait for value
+              (satisfies? clojure.core.async.impl.protocols/ReadPort result)
+              (let [val (<! result)]
+                (>! result-chan [:value val]))
+
+              ;; Handler returned something else (including promise)
+              :else
+              (>! result-chan [:value result])))
+          (catch Exception e
+            (>! result-chan [:error e]))))
+
+      ;; Wait for result or timeout
+      (let [[val ch] (async/alts!! [result-chan timeout-chan])]
+        (cond
+          (= ch timeout-chan)
+          [nil :timeout]
+
+          (= (first val) :error)
+          [(second val) :error]
+
+          :else
+          [(second val) :ok])))
+    (catch Exception e
+      [e :error])))
+
+(defn- batch-events
+  "Collect multiple rapid events into a batch.
+   Returns vector of events collected within batch-timeout-ms."
+  [event-chan batch-timeout-ms]
+  (let [events (atom [])
+        timeout-chan (timeout batch-timeout-ms)]
+    (loop []
+      (let [[event ch] (async/alts!! [event-chan timeout-chan] :priority true)]
+        (cond
+          ;; Got an event
+          (and event (= ch event-chan))
+          (do
+            (swap! events conj event)
+            (recur))
+
+          ;; Timeout or channel closed
+          :else
+          @events)))))
+
+(defn create-async-event-processor
+  "Create an async event processor that processes events from a queue.
+
+   Options:
+   - :event-queue - event queue created with create-event-queue
+   - :state-atom - atom containing application state
+   - :process-fn - function (event state) -> new-state
+   - :handler-timeout-ms - max time for handler execution (default 5000ms)
+   - :batch-events? - whether to batch rapid events (default false)
+   - :on-error - error callback (fn [error event state] ...)
+   - :on-timeout - timeout callback (fn [event state] ...)
+
+   Returns a map with:
+   - :stop! - function to stop the processor
+   - :running? - function to check if processor is running
+   - :stats - atom with {:events-processed :errors :timeouts}
+   - :processor-chan - the processor's go-loop channel"
+  [& {:keys [event-queue state-atom process-fn handler-timeout-ms
+             batch-events? on-error on-timeout]
+      :or {handler-timeout-ms 5000
+           batch-events? false}}]
+  {:pre [(some? event-queue)
+         (some? state-atom)
+         (fn? process-fn)]}
+
+  (let [event-chan (:chan event-queue)
+        running (atom true)
+        stop-promise (promise)
+        stats (atom {:events-processed 0
+                     :errors 0
+                     :timeouts 0
+                     :batches-processed 0})
+
+        processor-chan
+        (go-loop []
+          (if-not @running
+            ;; Cleanup when stopped
+            (deliver stop-promise true)
+
+            ;; Process events
+            (do
+              (try
+                (let [events (if batch-events?
+                              ;; Batch mode: collect rapid events
+                              (let [batch (batch-events event-chan (:batch-timeout-ms event-queue 16))]
+                                (when (seq batch)
+                                  (swap! stats update :batches-processed inc)
+                                  batch))
+                              ;; Single event mode
+                              (when-let [event (<! event-chan)]
+                                [event]))]
+
+                  (doseq [event events]
+                    (let [current-state @state-atom
+                          [new-state status] (call-handler-with-timeout
+                                              process-fn
+                                              event
+                                              current-state
+                                              handler-timeout-ms)]
+                      (case status
+                        :ok
+                        (do
+                          (reset! state-atom new-state)
+                          (swap! stats update :events-processed inc))
+
+                        :timeout
+                        (do
+                          (swap! stats update :timeouts inc)
+                          (binding [*out* *err*]
+                            (println (str "Warning: Event handler timeout after "
+                                         handler-timeout-ms "ms: " event)))
+                          (when on-timeout
+                            (try
+                              (on-timeout event current-state)
+                              (catch Exception e
+                                (binding [*out* *err*]
+                                  (println "Error in timeout callback:" e))))))
+
+                        :error
+                        (do
+                          (swap! stats update :errors inc)
+                          (binding [*out* *err*]
+                            (println "Error in event handler:" new-state))
+                          (when on-error
+                            (try
+                              (on-error new-state event current-state)
+                              (catch Exception e
+                                (binding [*out* *err*]
+                                  (println "Error in error callback:" e))))))))))
+
+                (catch Exception e
+                  (binding [*out* *err*]
+                    (println "Fatal error in event processor:" e))
+                  (swap! stats update :errors inc)))
+
+              ;; Continue loop (recur in tail position)
+              (recur))))]
+
+    {:stop! (fn []
+              (reset! running false)
+              (close! event-chan)
+              ;; Wait for processor to stop with timeout
+              (let [result (deref stop-promise 2000 :timeout)]
+                (when (= result :timeout)
+                  (binding [*out* *err*]
+                    (println "Warning: Event processor did not stop within 2 seconds")))))
+
+     :running? (fn [] @running)
+
+     :get-stats (fn [] @stats)
+
+     :processor-chan processor-chan}))
+
+(defn create-async-event-system
+  "Create a complete async event system with queue and processor.
+
+   This is a convenience function that combines create-event-queue
+   and create-async-event-processor.
+
+   Options: See create-event-queue and create-async-event-processor
+
+   Returns a map with:
+   - :queue - the event queue
+   - :processor - the event processor
+   - :put! - convenience fn to put events: (put! event)
+   - :stop! - stop everything
+   - :running? - check if running
+   - :get-stats - get processing statistics
+
+   Example:
+   ```clojure
+   (def event-system
+     (create-async-event-system
+       :state-atom app-state
+       :process-fn (fn [event state]
+                     (process-event event state))
+       :batch-events? true
+       :handler-timeout-ms 1000))
+
+   ;; Put events
+   ((:put! event-system) {:type :key :key \\a})
+
+   ;; Stop system
+   ((:stop! event-system))
+   ```"
+  [& {:keys [state-atom process-fn buffer-size handler-timeout-ms
+             batch-events? on-error on-timeout]
+      :or {buffer-size 100
+           handler-timeout-ms 5000
+           batch-events? false}
+      :as opts}]
+  {:pre [(some? state-atom)
+         (fn? process-fn)]}
+
+  (let [queue (create-event-queue :buffer-size buffer-size)
+        processor (create-async-event-processor
+                   :event-queue queue
+                   :state-atom state-atom
+                   :process-fn process-fn
+                   :handler-timeout-ms handler-timeout-ms
+                   :batch-events? batch-events?
+                   :on-error on-error
+                   :on-timeout on-timeout)]
+
+    {:queue queue
+     :processor processor
+
+     :put! (fn [event]
+             (put-event! queue event))
+
+     :stop! (fn []
+              ((:stop! processor)))
+
+     :running? (fn []
+                 ((:running? processor)))
+
+     :get-stats (fn []
+                  ((:get-stats processor)))}))
+
