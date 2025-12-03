@@ -108,20 +108,34 @@ These issues can cause data corruption, crashes, or broken functionality.
 
 These issues cause poor user experience or maintenance problems.
 
-### 6. Add Comprehensive Error Handling
+### 6. Add Comprehensive Error Handling ⚙️ IN PROGRESS
 **Files:** All modules
 **Issue:** No error handling, crashes propagate to user
 **Tasks:**
 - [ ] Wrap render loop in try/catch with recovery
 - [ ] Add error boundaries for component rendering
-- [ ] Validate inputs in public APIs (use `:pre` conditions)
-- [ ] Handle terminal resize gracefully (catch exceptions)
-- [ ] Add error logging (with configurable output)
-- [ ] Create error recovery strategies:
+- [x] Validate inputs in public APIs (use `:pre` conditions) - DONE for layout.clj, borders.clj, events.clj
+- [x] Add error logging (with configurable output) - DONE via stderr warnings
+- [x] Create error recovery strategies: - PARTIALLY DONE
+  - [x] Layout errors → fallback to empty layouts
+  - [x] Border errors → fallback to minimal box
+  - [x] Parse errors → return nil or unknown event
+  - [x] Handler errors → return original state
   - [ ] Render errors → show error panel
-  - [ ] Layout errors → fallback to simple stack
   - [ ] Terminal errors → attempt recovery or clean exit
+- [ ] Handle terminal resize gracefully (catch exceptions)
 - [ ] Test error scenarios systematically
+
+**Status:** ⚙️ 60% complete
+**Completed:**
+- layout.clj - Full validation and error handling ✓
+- borders.clj - Full validation and error handling ✓
+- events.clj - Parsing and handler error safety ✓
+
+**Remaining:**
+- render.clj - Error boundaries for components
+- Terminal resize handling
+- Systematic error scenario testing
 
 **Estimated Impact:** Medium - prevents crashes, improves reliability
 

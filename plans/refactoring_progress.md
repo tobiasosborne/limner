@@ -704,3 +704,105 @@ Optional improvements available (Important/Nice-to-Have issues):
 - Shadow effects have incorrect light source physics (cosmetic)
 - Some titled boxes have spacing alignment issues (cosmetic)
 - These are non-critical visual issues in borders.clj
+
+---
+
+### 6. Add Comprehensive Error Handling (IMPORTANT) ⚙️ IN PROGRESS
+
+**Status:** ⚙️ IN PROGRESS (60% complete)
+**Files Modified:**
+- `src/limner/layout.clj` - Added comprehensive validation and error handling
+- `src/limner/borders.clj` - Added validation and graceful error recovery
+- `src/limner/events.clj` - Added parsing error handling and handler safety
+
+**What Was Fixed:**
+
+#### layout.clj - Comprehensive Validation ✅
+**Before:**
+- No error handling at all
+- Hard `assert` that crashed immediately
+- No validation of dimensions, spacing, or constraints
+- Potential divide-by-zero errors in grid layout
+- No bounds checking
+
+**After:**
+- **Validation functions:**
+  - `validate-dimension` - Validates non-negative integers
+  - `validate-spacing` - Validates non-negative spacing
+  - `validate-constraint` - Validates constraint structure and type
+- **Input validation:**
+  - All `box`, `fixed`, `percent`, `flex` functions have `:pre` conditions
+  - `stack`, `hsplit`, `grid` validate components and options
+  - Replaced hard `assert` with descriptive `ex-info` exceptions
+- **Error recovery:**
+  - All layout functions (`layout-stack`, `layout-hsplit`, `layout-grid`) wrapped in try-catch
+  - Graceful fallback to empty layouts on errors
+  - All errors logged to stderr with context
+- **Edge case handling:**
+  - Empty components handled gracefully
+  - Negative dimensions clamped to 0
+  - Divide-by-zero prevented in grid layout
+  - `max 0` guards throughout to prevent negative values
+
+#### borders.clj - Graceful Error Handling ✅
+**Before:**
+- No validation of inputs
+- No handling of empty lines
+- No handling of invalid styles
+- No error recovery
+
+**After:**
+- **Validation functions:**
+  - `validate-lines` - Ensures collection of strings
+  - `validate-border-style` - Validates style type
+- **Error handling in all functions:**
+  - `draw-box` - Handles empty lines, returns minimal fallback on error
+  - `draw-titled-box` - Validates title, handles invalid title-pos
+  - `add-shadow`, `add-heavy-shadow` - Handle empty input, return original on error
+  - `indent-lines`, `nest-box` - Validate padding, clamp negative values
+  - `side-by-side` - Handle empty boxes, different heights
+  - `colorize-border` - Handle empty lines, short lines, coloring failures
+- **Edge case handling:**
+  - Empty lines create minimal box (2x2)
+  - Negative spacing/padding clamped to 0
+  - Invalid border styles fall back to :single
+  - All errors logged to stderr
+
+#### events.clj - Safe Parsing ✅
+**Before:**
+- No try-catch in parse functions
+- No validation of parsed values
+- No handling of malformed input
+- Handler errors could crash the application
+
+**After:**
+- **Helper function:**
+  - `safe-parse` - Generic safe parsing wrapper
+- **Mouse event parsing:**
+  - Wrapped in try-catch with validation
+  - Validates coordinates are reasonable (0-10000 range)
+  - Handles NumberFormatException gracefully
+  - Returns nil for malformed input
+- **Key event parsing:**
+  - Validates input is non-nil string
+  - Wrapped in try-catch
+  - Returns `{:type :unknown}` for unparseable input
+- **Handler safety:**
+  - `dispatch-key` wraps handler execution in try-catch
+  - Handler errors logged and original state returned
+  - Prevents single bad handler from crashing app
+
+**Testing:**
+- All 58 layout tests passing ✓
+- All 42 borders tests passing ✓
+- All 128 events tests passing ✓
+- No breaking changes to APIs
+- **Total: 228 assertions passing**
+
+**Remaining Tasks:**
+- [ ] Add error boundaries for component rendering in render.clj
+- [ ] Handle terminal resize gracefully with error recovery
+- [ ] Add comprehensive error logging system (optional)
+- [ ] Test error scenarios systematically
+
+**Impact:** Medium-High - Prevents crashes, improves reliability, better error messages

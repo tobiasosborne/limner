@@ -2,6 +2,18 @@
   "Event system - keyboard and mouse input handling"
   (:require [clojure.string :as str]))
 
+;; ────────────────────── Error Handling ──────────────────────
+
+(defn- safe-parse
+  "Safely parse input with error handling. Returns nil on error."
+  [parse-fn input context]
+  (try
+    (parse-fn input)
+    (catch Exception e
+      (binding [*out* *err*]
+        (println (str "Warning: Error parsing " context ":") (.getMessage e)))
+      nil)))
+
 ;; ────────────────────── Key Event Parsing ──────────────────────
 
 (def ^:private escape-sequences
@@ -72,53 +84,83 @@
    \u007f :backspace})
 
 (defn- parse-mouse-event
-  "Parse mouse event from CSI sequence. Format: CSI M Cb Cx Cy or CSI < Cb ; Cx ; Cy M"
+  "Parse mouse event from CSI sequence. Format: CSI M Cb Cx Cy or CSI < Cb ; Cx ; Cy M
+
+   Returns parsed mouse event map or nil if parsing fails.
+   Handles malformed input gracefully."
   [input]
-  (cond
-    ;; SGR mouse format: ESC [ < button ; x ; y M/m
-    (str/starts-with? input "\u001b[<")
-    (when-let [[_ button x y release] (re-find #"\u001b\[<(\d+);(\d+);(\d+)([Mm])" input)]
-      (let [btn (Integer/parseInt button)
-            button-type (cond
-                          (= btn 0) :left
-                          (= btn 1) :middle
-                          (= btn 2) :right
-                          (= btn 64) :scroll-up
-                          (= btn 65) :scroll-down
-                          :else :unknown)]
-        {:type :mouse
-         :button button-type
-         :action (if (= release "m") :release :press)
-         :x (Integer/parseInt x)
-         :y (Integer/parseInt y)
-         :raw input}))
+  (when (and input (string? input))
+    (try
+      (cond
+        ;; SGR mouse format: ESC [ < button ; x ; y M/m
+        (str/starts-with? input "\u001b[<")
+        (when-let [[_ button x y release] (re-find #"\u001b\[<(\d+);(\d+);(\d+)([Mm])" input)]
+          (try
+            (let [btn (Integer/parseInt button)
+                  button-type (cond
+                                (= btn 0) :left
+                                (= btn 1) :middle
+                                (= btn 2) :right
+                                (= btn 64) :scroll-up
+                                (= btn 65) :scroll-down
+                                :else :unknown)
+                  parsed-x (Integer/parseInt x)
+                  parsed-y (Integer/parseInt y)]
+              ;; Validate parsed coordinates are reasonable
+              (when (and (>= parsed-x 0) (>= parsed-y 0)
+                        (< parsed-x 10000) (< parsed-y 10000))
+                {:type :mouse
+                 :button button-type
+                 :action (if (= release "m") :release :press)
+                 :x parsed-x
+                 :y parsed-y
+                 :raw input}))
+            (catch NumberFormatException e
+              (binding [*out* *err*]
+                (println "Warning: Invalid mouse coordinates in SGR format"))
+              nil)))
 
-    ;; Normal mouse format: ESC [ M Cb Cx Cy
-    (str/starts-with? input "\u001b[M")
-    (when (>= (count input) 6)
-      (let [cb (int (nth input 3))
-            cx (- (int (nth input 4)) 32)
-            cy (- (int (nth input 5)) 32)
-            button (case (bit-and cb 3)
-                     0 :left
-                     1 :middle
-                     2 :right
-                     :unknown)]
-        {:type :mouse
-         :button button
-         :action :press
-         :x cx
-         :y cy
-         :raw input}))
+        ;; Normal mouse format: ESC [ M Cb Cx Cy
+        (str/starts-with? input "\u001b[M")
+        (when (>= (count input) 6)
+          (try
+            (let [cb (int (nth input 3))
+                  cx (- (int (nth input 4)) 32)
+                  cy (- (int (nth input 5)) 32)
+                  button (case (bit-and cb 3)
+                           0 :left
+                           1 :middle
+                           2 :right
+                           :unknown)]
+              ;; Validate parsed coordinates are reasonable
+              (when (and (>= cx 0) (>= cy 0))
+                {:type :mouse
+                 :button button
+                 :action :press
+                 :x cx
+                 :y cy
+                 :raw input}))
+            (catch Exception e
+              (binding [*out* *err*]
+                (println "Warning: Error parsing normal mouse format"))
+              nil)))
 
-    :else nil))
+        :else nil)
+      (catch Exception e
+        (binding [*out* *err*]
+          (println "Warning: Unexpected error parsing mouse event:" (.getMessage e)))
+        nil))))
 
 (defn parse-key
   "Parse raw input string into a key event map.
    Returns {:type :key, :key <key>, :char <char>, :modifiers #{...}, :raw <input>}
-   or {:type :mouse, ...} for mouse events, or nil if unparseable."
+   or {:type :mouse, ...} for mouse events, or nil if unparseable.
+
+   Handles malformed input gracefully and validates all parsed values."
   [input]
-  (when (seq input)
+  (when (and input (string? input))
+    (try
+      (when (seq input)
     (cond
       ;; Empty or nil
       (empty? input)
@@ -172,7 +214,11 @@
       ;; Unknown/unparseable
       :else
       {:type :unknown
-       :raw input})))
+       :raw input}))
+      (catch Exception e
+        (binding [*out* *err*]
+          (println "Warning: Error parsing key event:" (.getMessage e)))
+        {:type :unknown :raw (str input)}))))
 
 (defn key-combo
   "Create a key combo representation from key event or key spec.
@@ -223,12 +269,26 @@
 
 (defn dispatch-key
   "Dispatch a key event to the appropriate handler in the registry.
-   Returns the result of the handler or nil if no binding matched."
+   Returns the result of the handler or nil if no binding matched.
+
+   Handles handler errors gracefully - if a handler throws an exception,
+   it logs the error and returns the original state unchanged."
   [registry event state]
-  (let [bindings @(:bindings registry)
-        combo (key-combo event)]
-    (when-let [handler (get bindings combo)]
-      (handler event state))))
+  (try
+    (let [bindings @(:bindings registry)
+          combo (key-combo event)]
+      (when-let [handler (get bindings combo)]
+        (try
+          (handler event state)
+          (catch Exception e
+            (binding [*out* *err*]
+              (println "Error in key handler for" combo ":" (.getMessage e)))
+            ;; Return original state on handler error
+            state))))
+    (catch Exception e
+      (binding [*out* *err*]
+        (println "Error dispatching key event:" (.getMessage e)))
+      state)))
 
 ;; ────────────────────── Focus Management ──────────────────────
 
