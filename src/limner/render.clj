@@ -189,17 +189,94 @@
       (flush))
     (count regions)))
 
+;; ────────────────────── Error Handling & Validation ──────────────────────
+
+(defn- validate-render-output
+  "Validate that render function output is a collection of strings"
+  [output context]
+  (cond
+    (nil? output)
+    (do
+      (binding [*out* *err*]
+        (println (str "Warning: " context " returned nil, using empty output")))
+      [])
+
+    (not (sequential? output))
+    (do
+      (binding [*out* *err*]
+        (println (str "Warning: " context " returned non-sequential output: " (type output))))
+      [(str output)])
+
+    :else
+    (try
+      (mapv (fn [line]
+              (if (string? line)
+                line
+                (do
+                  (binding [*out* *err*]
+                    (println (str "Warning: Non-string line in render output: " (type line))))
+                  (str line))))
+            output)
+      (catch Exception e
+        (binding [*out* *err*]
+          (println (str "Error validating render output: " (.getMessage e))))
+        ["[Render validation error]"]))))
+
+(defn- safe-render-fn
+  "Safely call render function with error boundary"
+  [render-fn state context]
+  (try
+    (let [output (render-fn state)]
+      (validate-render-output output context))
+    (catch Exception e
+      (binding [*out* *err*]
+        (println (str "Error in " context ": " (.getMessage e))))
+      [(str "╔════════════════════════════════════════╗")
+       (str "║  RENDER ERROR                          ║")
+       (str "║                                        ║")
+       (str "║  " (subs (str (.getMessage e) "                                  ") 0 36) "  ║")
+       (str "║                                        ║")
+       (str "║  Check logs for details                ║")
+       (str "╚════════════════════════════════════════╝")])))
+
+(defn- safe-buffer-operation
+  "Safely perform buffer operation with error recovery"
+  [operation buffer fallback-fn context]
+  (try
+    (operation buffer)
+    (catch Exception e
+      (binding [*out* *err*]
+        (println (str "Error in buffer operation (" context "): " (.getMessage e))))
+      (fallback-fn buffer e))))
+
 ;; ────────────────────── Terminal Operations ──────────────────────
 
 (defn get-terminal-size
-  "Get current terminal dimensions"
+  "Get current terminal dimensions with error handling and validation"
   []
   (try
-    (let [cols (str/trim (:out (clojure.java.shell/sh "tput" "cols")))
-          lines (str/trim (:out (clojure.java.shell/sh "tput" "lines")))]
-      {:width (Integer/parseInt cols)
-       :height (Integer/parseInt lines)})
-    (catch Exception _
+    (let [result (clojure.java.shell/sh "tput" "cols")
+          cols (str/trim (:out result))
+          result2 (clojure.java.shell/sh "tput" "lines")
+          lines (str/trim (:out result2))]
+      (when (or (:err result) (:err result2))
+        (binding [*out* *err*]
+          (println "Warning: tput command had errors, using defaults")))
+      (let [width (try (Integer/parseInt cols) (catch Exception _ 80))
+            height (try (Integer/parseInt lines) (catch Exception _ 24))]
+        ;; Validate reasonable bounds
+        (when (or (< width 20) (> width 500))
+          (binding [*out* *err*]
+            (println (str "Warning: Invalid terminal width " width ", using 80")))
+          (assoc {} :width 80 :height height))
+        (when (or (< height 10) (> height 200))
+          (binding [*out* *err*]
+            (println (str "Warning: Invalid terminal height " height ", using 24")))
+          {:width width :height 24})
+        {:width width :height height}))
+    (catch Exception e
+      (binding [*out* *err*]
+        (println (str "Error getting terminal size: " (.getMessage e) ", using defaults")))
       {:width 80 :height 24})))
 
 (defn clear-screen
@@ -211,15 +288,23 @@
 (defn setup-terminal
   "Setup terminal for rendering (hide cursor, clear screen)"
   []
-  (core/hide-cursor)
-  (clear-screen))
+  (try
+    (core/hide-cursor)
+    (clear-screen)
+    (catch Exception e
+      (binding [*out* *err*]
+        (println (str "Error setting up terminal: " (.getMessage e)))))))
 
 (defn restore-terminal
   "Restore terminal to normal state"
   []
-  (core/show-cursor)
-  (print "\u001B[0m") ; Reset colors
-  (flush))
+  (try
+    (core/show-cursor)
+    (print "\u001B[0m") ; Reset colors
+    (flush)
+    (catch Exception e
+      (binding [*out* *err*]
+        (println (str "Error restoring terminal: " (.getMessage e)))))))
 
 ;; ────────────────────── Render State ──────────────────────
 
@@ -232,6 +317,7 @@
    :height height
    :frame-count 0
    :last-render-time (System/nanoTime)
+   :last-resize-check (System/currentTimeMillis)
    :target-fps 60})
 
 (defn swap-buffers
@@ -242,11 +328,17 @@
     :back-buffer (:front-buffer state)))
 
 (defn update-back-buffer
-  "Update the back buffer with new content"
+  "Update the back buffer with new content, with error recovery"
   [state content-lines]
-  (let [clean-buffer (clear-buffer (:back-buffer state))
-        updated-buffer (write-lines-to-buffer clean-buffer 0 0 content-lines)]
-    (assoc state :back-buffer updated-buffer)))
+  (try
+    (let [clean-buffer (clear-buffer (:back-buffer state))
+          updated-buffer (write-lines-to-buffer clean-buffer 0 0 content-lines)]
+      (assoc state :back-buffer updated-buffer))
+    (catch Exception e
+      (binding [*out* *err*]
+        (println (str "Error updating back buffer: " (.getMessage e))))
+      ;; Return state with cleared buffer on error
+      (assoc state :back-buffer (clear-buffer (:back-buffer state))))))
 
 ;; ────────────────────── Frame Rate Control ──────────────────────
 
@@ -268,6 +360,64 @@
   [state]
   (assoc state :last-render-time (System/nanoTime)))
 
+(defn- should-check-resize?
+  "Check if enough time has passed to check for terminal resize
+   Checks every 500ms to avoid excessive polling"
+  [state]
+  (let [now (System/currentTimeMillis)
+        elapsed (- now (:last-resize-check state 0))]
+    (>= elapsed 500)))
+
+(defn- resize-buffers
+  "Resize buffers to new dimensions, preserving what we can
+   Returns updated state with resized buffers"
+  [state new-width new-height]
+  (try
+    (let [old-width (:width state)
+          old-height (:height state)]
+      (if (and (= new-width old-width) (= new-height old-height))
+        ;; No change needed
+        state
+        ;; Resize needed
+        (do
+          (binding [*out* *err*]
+            (println (str "Terminal resized: " old-width "x" old-height
+                         " → " new-width "x" new-height)))
+          (assoc state
+            :width new-width
+            :height new-height
+            :front-buffer (create-buffer new-width new-height)
+            :back-buffer (create-buffer new-width new-height)
+            :last-resize-check (System/currentTimeMillis)))))
+    (catch Exception e
+      (binding [*out* *err*]
+        (println (str "Error resizing buffers: " (.getMessage e))))
+      ;; Return original state on error
+      (assoc state :last-resize-check (System/currentTimeMillis)))))
+
+(defn- check-and-handle-resize
+  "Check for terminal resize and handle it if detected
+   Returns [state resized?] where resized? indicates if resize occurred"
+  [state]
+  (if (should-check-resize? state)
+    (try
+      (let [current-size (get-terminal-size)
+            new-width (:width current-size)
+            new-height (:height current-size)]
+        (if (or (not= new-width (:width state))
+                (not= new-height (:height state)))
+          ;; Resize detected
+          [(resize-buffers state new-width new-height) true]
+          ;; No resize, just update check time
+          [(assoc state :last-resize-check (System/currentTimeMillis)) false]))
+      (catch Exception e
+        (binding [*out* *err*]
+          (println (str "Error checking terminal size: " (.getMessage e))))
+        ;; Return original state on error
+        [(assoc state :last-resize-check (System/currentTimeMillis)) false]))
+    ;; Not time to check yet
+    [state false]))
+
 (defn get-fps
   "Calculate actual FPS based on last render time"
   [state]
@@ -282,32 +432,52 @@
 (defn render-frame
   "Render a single frame with diff-based updates
    content-lines: vector of strings to render
-   Returns updated state"
+   Returns updated state
+
+   Error handling: Catches all exceptions and returns original state on error"
   [state content-lines]
   (if (should-render? state)
-    (let [updated-state (update-back-buffer state content-lines)
-          regions-count (apply-diff (:front-buffer updated-state)
-                                   (:back-buffer updated-state))
-          swapped-state (swap-buffers updated-state)]
-      (-> swapped-state
-          (update-render-time)
-          (update :frame-count inc)))
+    (try
+      (let [updated-state (update-back-buffer state content-lines)
+            regions-count (apply-diff (:front-buffer updated-state)
+                                     (:back-buffer updated-state))
+            swapped-state (swap-buffers updated-state)]
+        (-> swapped-state
+            (update-render-time)
+            (update :frame-count inc)))
+      (catch Exception e
+        (binding [*out* *err*]
+          (println (str "Error rendering frame: " (.getMessage e))))
+        state))
     state))
 
 (defn force-render
   "Force a full screen render, ignoring frame rate limits
-   Useful for initial render or after terminal resize"
+   Useful for initial render or after terminal resize
+
+   Error handling: Catches exceptions and attempts partial render"
   [state content-lines]
-  (clear-screen)
-  (let [clean-front (assoc state :front-buffer
-                          (clear-buffer (:front-buffer state)))
-        updated-state (update-back-buffer clean-front content-lines)
-        _ (apply-diff (:front-buffer updated-state)
-                     (:back-buffer updated-state))
-        swapped-state (swap-buffers updated-state)]
-    (-> swapped-state
-        (update-render-time)
-        (update :frame-count inc))))
+  (try
+    (clear-screen)
+    (let [clean-front (assoc state :front-buffer
+                            (clear-buffer (:front-buffer state)))
+          updated-state (update-back-buffer clean-front content-lines)
+          _ (apply-diff (:front-buffer updated-state)
+                       (:back-buffer updated-state))
+          swapped-state (swap-buffers updated-state)]
+      (-> swapped-state
+          (update-render-time)
+          (update :frame-count inc)))
+    (catch Exception e
+      (binding [*out* *err*]
+        (println (str "Error in force-render: " (.getMessage e))))
+      ;; Attempt to at least clear screen on error
+      (try
+        (clear-screen)
+        (catch Exception _
+          (binding [*out* *err*]
+            (println "Error: Could not clear screen"))))
+      state)))
 
 ;; ────────────────────── Render Loop ──────────────────────
 
@@ -357,25 +527,41 @@
           (try
             (setup-terminal)
 
-            ;; Initial render
-            (let [content (render-fn @app-state-atom)]
+            ;; Initial render with error boundary
+            (let [content (safe-render-fn render-fn @app-state-atom "render-fn (initial)")]
               (swap! render-state force-render content))
 
             ;; Main loop
             (loop [last-frame-time (System/currentTimeMillis)]
               (when @running
                 (try
-                  ;; Render frame
-                  (let [content (render-fn @app-state-atom)]
+                  ;; Check for terminal resize
+                  (let [[new-state resized?] (check-and-handle-resize @render-state)]
+                    (reset! render-state new-state)
+
+                    ;; If resized, force full re-render
+                    (when resized?
+                      (let [content (safe-render-fn render-fn @app-state-atom "render-fn (after resize)")]
+                        (swap! render-state force-render content))))
+
+                  ;; Render frame with error boundary
+                  (let [content (safe-render-fn render-fn @app-state-atom "render-fn")]
                     (swap! render-state render-frame content)
 
                     ;; Optional frame callback
                     (when on-frame
-                      (on-frame @render-state)))
+                      (try
+                        (on-frame @render-state)
+                        (catch Exception callback-error
+                          ;; Don't let frame callback crash the loop
+                          (binding [*out* *err*]
+                            (println "Error in on-frame callback:" callback-error))))))
 
-                  ;; Handle render errors
+                  ;; Handle render loop errors
                   (catch Exception e
                     (reset! error-atom e)
+                    (binding [*out* *err*]
+                      (println "Fatal error in render loop:" (.getMessage e)))
                     (when on-error
                       (try
                         (on-error e)
@@ -411,7 +597,7 @@
                   (throw error))))
 
      :force-render! (fn []
-                      (let [content (render-fn @app-state-atom)]
+                      (let [content (safe-render-fn render-fn @app-state-atom "render-fn (force)")]
                         (swap! render-state force-render content)))
 
      :get-stats (fn []

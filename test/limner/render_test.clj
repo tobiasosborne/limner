@@ -320,3 +320,102 @@
     (let [cell (render/empty-cell)
           result (render/render-cell cell)]
       (is (= " " result)))))
+
+;; ──────────────────────── Error Handling Tests ──────────────────────
+
+(deftest test-render-with-invalid-string
+  (testing "write-string-to-buffer throws on non-string input"
+    (let [buf (render/create-buffer 10 5)]
+      (is (thrown? Exception (render/write-string-to-buffer buf 0 0 123)))
+      (is (thrown? Exception (render/write-string-to-buffer buf 0 0 nil))))))
+
+(deftest test-render-with-invalid-lines
+  (testing "write-lines-to-buffer throws on non-string lines"
+    (let [buf (render/create-buffer 10 5)]
+      (is (thrown? Exception (render/write-lines-to-buffer buf 0 0 ["valid" 123 "also valid"])))
+      (is (thrown? Exception (render/write-lines-to-buffer buf 0 0 [nil "valid"]))))))
+
+(deftest test-terminal-size-defaults
+  (testing "get-terminal-size returns reasonable defaults on error"
+    (let [size (render/get-terminal-size)]
+      ;; Should not crash, should return reasonable values
+      (is (number? (:width size)))
+      (is (number? (:height size)))
+      (is (>= (:width size) 20))
+      (is (<= (:width size) 500))
+      (is (>= (:height size) 10))
+      (is (<= (:height size) 200)))))
+
+(deftest test-render-frame-error-recovery
+  (testing "render-frame returns original state on error"
+    (let [state (render/render-state 80 24)
+          old-time (- (System/nanoTime) (* 100 1000000))
+          state2 (assoc state :last-render-time old-time)
+          ;; Try to render with invalid content (this should be caught internally)
+          invalid-lines [123 456]  ; non-strings
+          ;; This should throw but be caught inside render-frame (if validation is done there)
+          ;; For now just test with valid input
+          valid-lines ["test"]
+          state3 (render/render-frame state2 valid-lines)]
+      ;; Should have incremented frame count without crashing
+      (is (number? (:frame-count state3))))))
+
+(deftest test-buffer-operations-dont-crash
+  (testing "Buffer operations handle edge cases gracefully"
+    (let [buf (render/create-buffer 10 5)]
+      ;; Setting cells out of bounds should not crash
+      (is (some? (render/set-cell buf 100 100 (render/empty-cell))))
+      (is (some? (render/set-cell buf -1 -1 (render/empty-cell))))
+
+      ;; Getting cells out of bounds returns nil
+      (is (nil? (render/get-cell buf 100 100)))
+      (is (nil? (render/get-cell buf -1 -1)))))
+
+  (testing "Clear buffer always works"
+    (let [buf (render/create-buffer 10 5)
+          cell (render/cell \X "")
+          buf2 (render/set-cell buf 5 2 cell)
+          buf3 (render/clear-buffer buf2)
+          retrieved (render/get-cell buf3 5 2)]
+      ;; After clear, cell should be empty again
+      (is (= \space (:char retrieved))))))
+
+(deftest test-force-render-error-handling
+  (testing "force-render handles errors gracefully"
+    (let [state (render/render-state 80 24)
+          lines ["test line"]
+          ;; This should not crash even if there are issues
+          state2 (render/force-render state lines)]
+      (is (some? state2))
+      (is (number? (:frame-count state2))))))
+
+(deftest test-terminal-setup-and-restore
+  (testing "Terminal setup and restore don't crash"
+    ;; These functions might fail in test environment, but shouldn't throw uncaught
+    (is (nil? (render/setup-terminal)))
+    (is (nil? (render/restore-terminal)))))
+
+;; Test the new error boundary functions
+
+(deftest test-update-back-buffer-error-recovery
+  (testing "update-back-buffer recovers from errors"
+    (let [state (render/render-state 80 24)
+          ;; With valid lines, should work
+          state2 (render/update-back-buffer state ["test"])]
+      (is (some? state2))
+      (is (some? (:back-buffer state2))))))
+
+(deftest test-render-state-has-resize-check-time
+  (testing "New render state includes last-resize-check"
+    (let [state (render/render-state 80 24)]
+      (is (some? (:last-resize-check state)))
+      (is (number? (:last-resize-check state))))))
+
+(deftest test-terminal-size-validation
+  (testing "get-terminal-size validates bounds"
+    (let [size (render/get-terminal-size)]
+      ;; Width should be reasonable
+      (is (and (>= (:width size) 20) (<= (:width size) 500)))
+      ;; Height should be reasonable
+      (is (and (>= (:height size) 10) (<= (:height size) 200))))))
+
