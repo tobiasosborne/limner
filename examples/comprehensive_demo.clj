@@ -1077,11 +1077,17 @@
 (defn -main
   "Application entry point with terminal setup/cleanup"
   []
-  (println (core/color :cyan "\n╔════════════════════════════════════════════════════════════╗"))
-  (println (core/color :cyan "║  "))
-  (print (core/color :bold "LIMNER COMPREHENSIVE DEMO"))
-  (println (core/color :cyan "  - Starting...           ║"))
-  (println (core/color :cyan "╚════════════════════════════════════════════════════════════╝\n"))
+  (let [{:keys [width]} (render/get-terminal-size)
+        inner-width (- width 2)
+        title "LIMNER COMPREHENSIVE DEMO - Starting..."
+        padding (max 0 (- inner-width (count title) 2))
+        left-pad (quot padding 2)
+        right-pad (- padding left-pad)]
+    (println (core/color :cyan (str "\n╔" (apply str (repeat inner-width "═")) "╗")))
+    (println (core/color :cyan (str "║" (apply str (repeat left-pad " "))
+                                    (core/color :bold title)
+                                    (apply str (repeat right-pad " ")) "║")))
+    (println (core/color :cyan (str "╚" (apply str (repeat inner-width "═")) "╝\n"))))
 
   ;; Detect capabilities and show info
   (let [caps (terminal/detect-capabilities)]

@@ -252,40 +252,41 @@
 ;; ────────────────────── Terminal Operations ──────────────────────
 
 (defn get-terminal-size
-  "Get current terminal dimensions with error handling and validation"
+  "Get current terminal dimensions with error handling and validation.
+   Tries multiple methods to get accurate terminal size."
   []
-  (try
-    (let [result (clojure.java.shell/sh "tput" "cols")
-          cols (str/trim (:out result))
-          result2 (clojure.java.shell/sh "tput" "lines")
-          lines (str/trim (:out result2))]
-      (when (or (seq (:err result)) (seq (:err result2)))
-        (binding [*out* *err*]
-          (println "Warning: tput command had errors, using defaults")))
-      (let [raw-width (try (Integer/parseInt cols) (catch Exception _ 80))
-            raw-height (try (Integer/parseInt lines) (catch Exception _ 24))
-            ;; Validate and clamp to reasonable bounds
-            width (cond
-                    (< raw-width 20) (do (binding [*out* *err*]
-                                           (println (str "Warning: Terminal width " raw-width " too small, using 80")))
-                                         80)
-                    (> raw-width 500) (do (binding [*out* *err*]
-                                            (println (str "Warning: Terminal width " raw-width " too large, using 500")))
-                                          500)
-                    :else raw-width)
-            height (cond
-                     (< raw-height 10) (do (binding [*out* *err*]
-                                             (println (str "Warning: Terminal height " raw-height " too small, using 24")))
-                                           24)
-                     (> raw-height 200) (do (binding [*out* *err*]
-                                              (println (str "Warning: Terminal height " raw-height " too large, using 200")))
-                                            200)
-                     :else raw-height)]
-        {:width width :height height}))
-    (catch Exception e
-      (binding [*out* *err*]
-        (println (str "Error getting terminal size: " (.getMessage e) ", using defaults")))
-      {:width 80 :height 24})))
+  (letfn [(try-stty []
+            ;; Try stty size which works better with actual terminals
+            (try
+              (let [result (clojure.java.shell/sh "sh" "-c" "stty size </dev/tty 2>/dev/null")
+                    output (str/trim (:out result))]
+                (when (seq output)
+                  (let [[rows cols] (str/split output #"\s+")]
+                    {:width (Integer/parseInt cols)
+                     :height (Integer/parseInt rows)})))
+              (catch Exception _ nil)))
+          
+          (try-tput []
+            ;; Fallback to tput
+            (try
+              (let [cols-result (clojure.java.shell/sh "sh" "-c" "tput cols </dev/tty 2>/dev/null || tput cols")
+                    lines-result (clojure.java.shell/sh "sh" "-c" "tput lines </dev/tty 2>/dev/null || tput lines")
+                    cols (str/trim (:out cols-result))
+                    lines (str/trim (:out lines-result))]
+                (when (and (seq cols) (seq lines))
+                  {:width (Integer/parseInt cols)
+                   :height (Integer/parseInt lines)}))
+              (catch Exception _ nil)))
+          
+          (validate-size [{:keys [width height] :as size}]
+            (when size
+              (let [w (cond (< width 20) 80 (> width 500) 500 :else width)
+                    h (cond (< height 10) 24 (> height 200) 200 :else height)]
+                {:width w :height h})))]
+    
+    (or (validate-size (try-stty))
+        (validate-size (try-tput))
+        {:width 80 :height 24})))
 
 (defn clear-screen
   "Clear entire screen and move cursor to home"
