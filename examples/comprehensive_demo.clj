@@ -869,7 +869,73 @@
         focused (get-in state [:focus :focused])]
 
     (cond
-      ;; Global shortcuts (always available)
+      ;; FIRST: Handle text input fields (before global shortcuts)
+      ;; This prevents global shortcuts from intercepting characters
+      (= focused :new-task-title)
+      (cond
+        ;; Escape to cancel
+        (events/key-matches? event [:escape])
+        (do
+          (state/assoc-in-state! state-atom [:new-task-title] "")
+          (state/assoc-in-state! state-atom [:focus :focused] :task-list))
+        
+        ;; Backspace
+        (events/key-matches? event [:backspace])
+        (state/update-in-state! state-atom [:new-task-title]
+                               #(if (empty? %) % (subs % 0 (dec (count %)))))
+        
+        ;; Tab to next field
+        (events/key-matches? event [:tab])
+        (state/assoc-in-state! state-atom [:focus :focused] :new-task-description)
+        
+        ;; Enter to submit (if valid)
+        (events/key-matches? event [:enter])
+        (when (validate-task-title (:new-task-title state))
+          (add-task! state-atom (:new-task-title state) (:new-task-description state) (:new-task-priority state))
+          (state/assoc-in-state! state-atom [:focus :focused] :task-list))
+        
+        ;; Regular character input (including 'n', 'h', 'q', etc.)
+        (:char event)
+        (do
+          (state/update-in-state! state-atom [:new-task-title] str (:char event))
+          (state/assoc-in-state! state-atom [:input-validation :title-valid]
+                                (validate-task-title (str (:new-task-title state) (:char event))))))
+
+      (= focused :new-task-description)
+      (cond
+        ;; Escape to cancel
+        (events/key-matches? event [:escape])
+        (do
+          (state/assoc-in-state! state-atom [:new-task-description] "")
+          (state/assoc-in-state! state-atom [:focus :focused] :task-list))
+        
+        ;; Backspace
+        (events/key-matches? event [:backspace])
+        (state/update-in-state! state-atom [:new-task-description]
+                               #(if (empty? %) % (subs % 0 (dec (count %)))))
+        
+        ;; Tab to next field (cycles back to title or to task list)
+        (events/key-matches? event [:tab])
+        (state/assoc-in-state! state-atom [:focus :focused] :task-list)
+        
+        ;; Shift+Tab to previous field
+        (events/key-matches? event [:shift :tab])
+        (state/assoc-in-state! state-atom [:focus :focused] :new-task-title)
+        
+        ;; Enter to submit
+        (events/key-matches? event [:enter])
+        (when (validate-task-title (:new-task-title state))
+          (add-task! state-atom (:new-task-title state) (:new-task-description state) (:new-task-priority state))
+          (state/assoc-in-state! state-atom [:focus :focused] :task-list))
+        
+        ;; Regular character input
+        (:char event)
+        (do
+          (state/update-in-state! state-atom [:new-task-description] str (:char event))
+          (state/assoc-in-state! state-atom [:input-validation :description-valid]
+                                (validate-task-description (str (:new-task-description state) (:char event))))))
+
+      ;; Global shortcuts (only when NOT in text input)
       (events/key-matches? event [:q])
       (state/assoc-in-state! state-atom [:running] false)
 
@@ -937,64 +1003,9 @@
         (events/key-matches? event [:d])
         (if (:multi-select-mode state)
           (delete-selected-tasks! state-atom)
-          (toggle-task-complete! state-atom (:selected-task-id state))))
+          (toggle-task-complete! state-atom (:selected-task-id state)))))
 
-      ;; Text input fields
-      (= focused :new-task-title)
-      (cond
-        ;; Regular character input
-        (:char event)
-        (do
-          (state/update-in-state! state-atom [:new-task-title] str (:char event))
-          (state/assoc-in-state! state-atom [:input-validation :title-valid]
-                                (validate-task-title (str (:new-task-title state) (:char event)))))
-
-        ;; Backspace
-        (events/key-matches? event [:backspace])
-        (let [current (:new-task-title state)]
-          (when (seq current)
-            (state/assoc-in-state! state-atom [:new-task-title]
-                                  (subs current 0 (dec (count current))))
-            (state/assoc-in-state! state-atom [:input-validation :title-valid]
-                                  (validate-task-title (subs current 0 (dec (count current)))))))
-
-        ;; Submit with Enter
-        (events/key-matches? event [:enter])
-        (let [title (:new-task-title state)
-              description (:new-task-description state)
-              priority (:new-task-priority state)]
-          (when (and (validate-task-title title)
-                    (validate-task-description description))
-            (add-task! state-atom title description priority))))
-
-      (= focused :new-task-description)
-      (cond
-        ;; Regular character input
-        (:char event)
-        (do
-          (state/update-in-state! state-atom [:new-task-description] str (:char event))
-          (state/assoc-in-state! state-atom [:input-validation :description-valid]
-                                (validate-task-description (str (:new-task-description state) (:char event)))))
-
-        ;; Backspace
-        (events/key-matches? event [:backspace])
-        (let [current (:new-task-description state)]
-          (when (seq current)
-            (state/assoc-in-state! state-atom [:new-task-description]
-                                  (subs current 0 (dec (count current))))
-            (state/assoc-in-state! state-atom [:input-validation :description-valid]
-                                  (validate-task-description (subs current 0 (dec (count current)))))))
-
-        ;; Submit with Enter
-        (events/key-matches? event [:enter])
-        (let [title (:new-task-title state)
-              description (:new-task-description state)
-              priority (:new-task-priority state)]
-          (when (and (validate-task-title title)
-                    (validate-task-description description))
-            (add-task! state-atom title description priority)))))
-
-    ;; Return updated state (though we use state-atom, return for convention)
+    ;; Return nil (state updated via atom)
     nil))
 
 ;; ═══════════════════════════════════════════════════════════════════════════
@@ -1078,16 +1089,16 @@
   "Application entry point with terminal setup/cleanup"
   []
   (let [{:keys [width]} (render/get-terminal-size)
-        inner-width (- width 2)
         title "LIMNER COMPREHENSIVE DEMO - Starting..."
-        padding (max 0 (- inner-width (count title) 2))
-        left-pad (quot padding 2)
-        right-pad (- padding left-pad)]
-    (println (core/color :cyan (str "\n╔" (apply str (repeat inner-width "═")) "╗")))
-    (println (core/color :cyan (str "║" (apply str (repeat left-pad " "))
-                                    (core/color :bold title)
-                                    (apply str (repeat right-pad " ")) "║")))
-    (println (core/color :cyan (str "╚" (apply str (repeat inner-width "═")) "╝\n"))))
+        banner-box (borders/colorize-border
+                     (borders/draw-titled-box "" [title] 
+                                              :border-style :double 
+                                              :title-pos :center)
+                     :cyan)]
+    (println)
+    (doseq [line banner-box]
+      (println line))
+    (println))
 
   ;; Detect capabilities and show info
   (let [caps (terminal/detect-capabilities)]
