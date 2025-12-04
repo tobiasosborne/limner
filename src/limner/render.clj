@@ -259,20 +259,28 @@
           cols (str/trim (:out result))
           result2 (clojure.java.shell/sh "tput" "lines")
           lines (str/trim (:out result2))]
-      (when (or (:err result) (:err result2))
+      (when (or (seq (:err result)) (seq (:err result2)))
         (binding [*out* *err*]
           (println "Warning: tput command had errors, using defaults")))
-      (let [width (try (Integer/parseInt cols) (catch Exception _ 80))
-            height (try (Integer/parseInt lines) (catch Exception _ 24))]
-        ;; Validate reasonable bounds
-        (when (or (< width 20) (> width 500))
-          (binding [*out* *err*]
-            (println (str "Warning: Invalid terminal width " width ", using 80")))
-          (assoc {} :width 80 :height height))
-        (when (or (< height 10) (> height 200))
-          (binding [*out* *err*]
-            (println (str "Warning: Invalid terminal height " height ", using 24")))
-          {:width width :height 24})
+      (let [raw-width (try (Integer/parseInt cols) (catch Exception _ 80))
+            raw-height (try (Integer/parseInt lines) (catch Exception _ 24))
+            ;; Validate and clamp to reasonable bounds
+            width (cond
+                    (< raw-width 20) (do (binding [*out* *err*]
+                                           (println (str "Warning: Terminal width " raw-width " too small, using 80")))
+                                         80)
+                    (> raw-width 500) (do (binding [*out* *err*]
+                                            (println (str "Warning: Terminal width " raw-width " too large, using 500")))
+                                          500)
+                    :else raw-width)
+            height (cond
+                     (< raw-height 10) (do (binding [*out* *err*]
+                                             (println (str "Warning: Terminal height " raw-height " too small, using 24")))
+                                           24)
+                     (> raw-height 200) (do (binding [*out* *err*]
+                                              (println (str "Warning: Terminal height " raw-height " too large, using 200")))
+                                            200)
+                     :else raw-height)]
         {:width width :height height}))
     (catch Exception e
       (binding [*out* *err*]

@@ -325,35 +325,115 @@
 ;; UI COMPONENTS - Demonstrates all component rendering
 ;; ═══════════════════════════════════════════════════════════════════════════
 
+(defn truncate-string-to-width
+  "Truncate a string to target visible width, preserving ANSI codes."
+  [s target-width]
+  (let [visible-w (core/visible-width s)]
+    (if (<= visible-w target-width)
+      s
+      (loop [chars (seq s)
+             result []
+             width 0
+             in-ansi false]
+        (if (or (empty? chars) (>= width target-width))
+          (str (apply str result) "\u001b[0m")  ; Reset ANSI at end
+          (let [c (first chars)]
+            (cond
+              (= c \u001b)
+              (recur (rest chars) (conj result c) width true)
+              in-ansi
+              (recur (rest chars) (conj result c) width (not= c \m))
+              :else
+              (let [char-w (if (and (>= (int c) 0x4E00) (<= (int c) 0x9FFF)) 2 1)]
+                (if (> (+ width char-w) target-width)
+                  (str (apply str result) "\u001b[0m")
+                  (recur (rest chars) (conj result c) (+ width char-w) false))))))))))
+
+(defn fit-content-lines
+  "Truncate content lines to fit within a box of given inner width"
+  [lines inner-width]
+  (mapv #(truncate-string-to-width % inner-width) lines))
+
+(defn create-fitted-box
+  "Create a box with title that fits exactly within target-width.
+   Content is padded/truncated to fill the box interior."
+  [title content-lines target-width border-style]
+  (let [inner-width (- target-width 4)  ; Account for "│ " and " │"
+        ;; Pad or truncate each line to exactly inner-width
+        fitted-content (mapv (fn [line]
+                               (let [truncated (truncate-string-to-width line inner-width)
+                                     w (core/visible-width truncated)
+                                     padding (- inner-width w)]
+                                 (if (pos? padding)
+                                   (str truncated (apply str (repeat padding " ")))
+                                   truncated)))
+                             content-lines)]
+    (borders/draw-titled-box title fitted-content
+                             :border-style border-style
+                             :title-pos :left)))
+
+(defn fit-box-to-height
+  "Fit box to exact height, preserving top and bottom borders.
+   If truncating, keeps first lines + bottom border.
+   If padding, adds empty lines before bottom border."
+  [box-lines target-height target-width]
+  (let [current (count box-lines)
+        empty-line (apply str (repeat target-width " "))]
+    (cond
+      (= current target-height) (vec box-lines)
+      (< current target-height)
+      ;; Pad: insert empty lines before the last line (bottom border)
+      (let [top-lines (butlast box-lines)
+            bottom-line (last box-lines)
+            padding-needed (- target-height current)]
+        (vec (concat top-lines
+                     (repeat padding-needed empty-line)
+                     [bottom-line])))
+      :else
+      ;; Truncate: keep first (target-height - 1) lines + bottom border
+      (let [keep-count (dec target-height)
+            top-lines (take keep-count box-lines)
+            bottom-line (last box-lines)]
+        (vec (concat top-lines [bottom-line]))))))
+
 (defn render-header
   "Render header with title and capabilities info (demonstrates colors and borders)"
-  [state caps]
+  [state caps term-width]
   (let [;; Demonstrate terminal capability detection
         color-mode (terminal/select-color-mode)
         unicode-support (terminal/supports-feature? :unicode)
 
-        ;; Build title with appropriate colors
-        title (str "╔═══════════════════════════════════════════════════════════╗\n"
-                   "║  " (core/color :bold "LIMNER TASK MANAGER")
-                   " - Comprehensive Feature Demo    ║\n"
-                   "╚═══════════════════════════════════════════════════════════╝")
+        ;; Build title lines - scale to terminal width
+        title-text "LIMNER TASK MANAGER - Comprehensive Feature Demo"
+        box-width (- term-width 2)  ; inner width (minus 2 for box chars ╔╗)
+        title-top    (str "╔" (apply str (repeat box-width "═")) "╗")
+        
+        ;; Center the title text
+        title-len (count title-text)
+        left-pad (max 1 (quot (- box-width title-len) 2))
+        right-pad (max 1 (- box-width title-len left-pad))
+        padded-title (str "║" (apply str (repeat left-pad " "))
+                         (core/color :bold title-text)
+                         (apply str (repeat right-pad " ")) "║")
+        title-bottom (str "╚" (apply str (repeat box-width "═")) "╝")
 
-        ;; Capability info (demonstrates color selection based on capabilities)
+        ;; Capability info - also scale to width
         cap-info (str "Terminal: " (terminal/detect-term-type)
                       " │ Colors: " (name color-mode)
                       " │ Unicode: " (if unicode-support "✓" "Yes")
                       " │ FPS: 60")
 
         ;; Apply colors based on capabilities
-        colored-title (if (terminal/supports-feature? :ansi-colors)
-                        (core/color :cyan title)
-                        title)
-        colored-info (if (terminal/supports-feature? :ansi-colors)
-                       (core/color :bright-black cap-info)
-                       cap-info)]
+        color-fn (if (terminal/supports-feature? :ansi-colors)
+                   #(core/color :cyan %)
+                   identity)]
 
-    [(str colored-title)
-     colored-info
+    [(color-fn title-top)
+     (color-fn padded-title)
+     (color-fn title-bottom)
+     (if (terminal/supports-feature? :ansi-colors)
+       (core/color :bright-black cap-info)
+       cap-info)
      ""]))
 
 (defn render-task-list
@@ -663,12 +743,12 @@
                      ""
                      (core/color :bright-black "Press 'h' again to close")]
 
-        ;; Box the help content (demonstrates borders with shadows)
-        ;; Note: draw-titled-box takes (title lines & opts) so we can't use -> threading
-        boxed (-> (borders/draw-titled-box "Help" help-content :border-style :double :title-pos :center)
-                  (borders/add-shadow :shadow-char "▓")
-                  (borders/colorize-border :cyan))]
-
+        ;; Box the help content (no shadow - simpler and cleaner)
+        boxed (borders/colorize-border
+                (borders/draw-titled-box "Help" help-content 
+                                         :border-style :double 
+                                         :title-pos :center)
+                :cyan)]
     boxed))
 
 ;; ═══════════════════════════════════════════════════════════════════════════
@@ -683,65 +763,66 @@
         term-width (:width term-size)
         term-height (:height term-size)
 
+        ;; Calculate widths for 3-column layout with spacing
+        spacing 2
+        usable-width (- term-width (* spacing 2))  ; 2 gaps between 3 boxes
+        list-width (int (* usable-width 0.40))
+        details-width (int (* usable-width 0.35))
+        stats-width (- usable-width list-width details-width)
+        
+        border-style (terminal/select-border-style)
+
         ;; Render all components
-        header-lines (render-header state caps)
+        header-lines (render-header state caps term-width)
         task-list-lines (render-task-list state)
         task-details-lines (render-task-details state)
         statistics-lines (render-statistics state)
         input-panel-lines (render-input-panel state)
         statusbar-lines (render-statusbar state)
 
-        ;; Box components (demonstrates borders and styling)
+        ;; Create boxes with correct widths (content truncated to fit)
         task-list-box (borders/colorize-border
-                        (borders/draw-titled-box "Task List"
-                                                 task-list-lines
-                                                 :border-style (terminal/select-border-style)
-                                                 :title-pos :left)
+                        (create-fitted-box "Task List" task-list-lines list-width border-style)
                         :cyan)
 
         task-details-box (borders/colorize-border
-                          (borders/draw-titled-box "Details"
-                                                   task-details-lines
-                                                   :border-style (terminal/select-border-style)
-                                                   :title-pos :left)
-                          :blue)
+                           (create-fitted-box "Details" task-details-lines details-width border-style)
+                           :blue)
 
         statistics-box (borders/colorize-border
-                        (borders/draw-titled-box "Stats"
-                                                 statistics-lines
-                                                 :border-style (terminal/select-border-style)
-                                                 :title-pos :left)
-                        :green)
+                         (create-fitted-box "Stats" statistics-lines stats-width border-style)
+                         :green)
 
         input-panel-box (borders/colorize-border
-                         (borders/draw-titled-box "Add Task"
-                                                  input-panel-lines
-                                                  :border-style (terminal/select-border-style)
-                                                  :title-pos :left)
-                         :yellow)
+                          (create-fitted-box "Add Task" input-panel-lines term-width border-style)
+                          :yellow)
 
-        ;; Manual layout (in real app would use layout engine more extensively)
-        ;; Demonstrates: header (fixed) | body (flex) | status (fixed)
+        ;; Calculate available height for main content boxes
+        ;; Layout: header + blank + main_boxes + blank + input + blank + status
+        header-height (count header-lines)
+        input-height (count input-panel-box)
+        status-height (count statusbar-lines)
+        fixed-height (+ header-height 1 1 input-height 1 status-height)
+        available-for-main (max 6 (- term-height fixed-height))
+
+        ;; Calculate box height (all 3 main boxes should match)
+        box-height (min available-for-main
+                       (max (count task-list-box)
+                            (count task-details-box)
+                            (count statistics-box)))
+
+        ;; Fit boxes to uniform height (preserving borders)
+        list-fitted (fit-box-to-height task-list-box box-height list-width)
+        details-fitted (fit-box-to-height task-details-box box-height details-width)
+        stats-fitted (fit-box-to-height statistics-box box-height stats-width)
 
         output-lines (concat
                       header-lines
                       [""]
 
                       ;; Main content area - side by side boxes
-                      ;; Left: Task List (40% width)
-                      ;; Center: Task Details (35% width)
-                      ;; Right: Statistics (25% width)
-                      (let [;; Take first N lines from each box to fit terminal
-                            max-height (- term-height 15)  ; Leave room for header, input, status
-
-                            ;; Truncate boxes to fit
-                            list-truncated (take max-height task-list-box)
-                            details-truncated (take max-height task-details-box)
-                            stats-truncated (take max-height statistics-box)
-
-                            ;; Side by side (demonstrates box composition)
-                            left-and-center (borders/side-by-side list-truncated details-truncated 2)
-                            all-three (borders/side-by-side left-and-center stats-truncated 2)]
+                      (let [left-and-center (borders/side-by-side list-fitted details-fitted spacing)
+                            all-three (borders/side-by-side left-and-center stats-fitted spacing)]
                         all-three)
 
                       [""]
@@ -749,38 +830,30 @@
                       [""]
                       statusbar-lines)
 
-        ;; If help is visible, overlay it on top (demonstrates overlay)
+        ;; If help is visible, show centered help screen instead
         final-output (if (:show-help state)
-                      (let [help-box (render-help-overlay)
-                            help-height (count help-box)
-                            help-width (apply max (map core/visible-width help-box))
+                       (let [help-box (render-help-overlay)
+                             help-height (count help-box)
+                             help-width (apply max (map core/visible-width help-box))
+                             
+                             ;; Center vertically
+                             top-padding (max 0 (quot (- term-height help-height) 2))
+                             bottom-padding (max 0 (- term-height help-height top-padding))
+                             
+                             ;; Center horizontally - pad each help line
+                             left-pad (max 0 (quot (- term-width help-width) 2))
+                             centered-help (mapv (fn [line]
+                                                   (str (apply str (repeat left-pad " ")) line))
+                                                 help-box)
+                             
+                             ;; Build full screen
+                             empty-line (apply str (repeat term-width " "))]
+                         (vec (concat
+                               (repeat top-padding empty-line)
+                               centered-help
+                               (repeat bottom-padding empty-line))))
+                       output-lines)]
 
-                            ;; Center the help box
-                            start-row (int (/ (- term-height help-height) 2))
-                            start-col (int (/ (- term-width help-width) 2))
-
-                            ;; Overlay help on output (simple approach: replace lines)
-                            output-vec (vec output-lines)
-                            overlaid (reduce
-                                     (fn [lines [idx help-line]]
-                                       (let [row (+ start-row idx)]
-                                         (if (< row (count lines))
-                                           (let [old-line (nth lines row)
-                                                 ;; Pad old line if needed
-                                                 padded-old (str old-line (str/join (repeat (- start-col (count old-line)) " ")))
-                                                 ;; Insert help-line at start-col
-                                                 new-line (str (subs padded-old 0 start-col)
-                                                             help-line
-                                                             (when (< (+ start-col (count help-line)) (count padded-old))
-                                                               (subs padded-old (+ start-col (count help-line)))))]
-                                             (assoc lines row new-line))
-                                           lines)))
-                                     output-vec
-                                     (map-indexed vector help-box))]
-                        overlaid)
-                      output-lines)]
-
-    ;; Return as vector of strings
     (vec final-output)))
 
 ;; ═══════════════════════════════════════════════════════════════════════════
