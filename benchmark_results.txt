@@ -1,0 +1,415 @@
+
+🔧 System Information:
+  Java Version: 25
+  OS: Linux 6.6.87.2-microsoft-standard-WSL2
+  Architecture: amd64
+  Available Processors: 64
+  Max Memory: 32732 MB
+
+ ━ 70
+  📦 Border Rendering
+   ━ 70
+
+ = 70
+  🚀 Limner Performance Benchmark Suite
+   = 70
+
+📊 Benchmarking: Simple box (3 lines) (10000 iterations)
+  ✓ Simple box (3 lines)
+    Iterations:   01,000.00
+    Total time:   1,518.80 ms
+    Average:      0.18 ms
+    Median:       0.15 ms
+    Min/Max:      0.14 / 3.94 ms
+    Throughput:   5,705.21 ops/sec
+
+📊 Benchmarking: Titled box (10000 iterations)
+  ✓ Titled box
+    Iterations:   01,000.00
+    Total time:   2,528.00 ms
+    Average:      0.28 ms
+    Median:       0.25 ms
+    Min/Max:      0.21 / 4.02 ms
+    Throughput:   3,935.82 ops/sec
+
+📊 Benchmarking: Box with shadow (10000 iterations)
+  ✓ Box with shadow
+    Iterations:   01,000.00
+    Total time:   2,336.32 ms
+    Average:      0.26 ms
+    Median:       0.23 ms
+    Min/Max:      0.20 / 3.60 ms
+    Throughput:   3,797.49 ops/sec
+
+📊 Benchmarking: Colorized border (10000 iterations)
+  ✓ Colorized border
+    Iterations:   01,000.00
+    Total time:   1,435.24 ms
+    Average:      0.15 ms
+    Median:       0.13 ms
+    Min/Max:      0.12 / 3.48 ms
+    Throughput:   6,715.89 ops/sec
+
+📊 Benchmarking: Nested boxes (2 levels) (5000 iterations)
+  ✓ Nested boxes (2 levels)
+    Iterations:   5,000.00
+    Total time:   1,153.51 ms
+    Average:      0.27 ms
+    Median:       0.24 ms
+    Min/Max:      0.21 / 3.49 ms
+    Throughput:   3,996.56 ops/sec
+
+📊 Benchmarking: Side-by-side (2 boxes) (5000 iterations)
+  ✓ Side-by-side (2 boxes)
+    Iterations:   5,000.00
+    Total time:   1,874.48 ms
+    Average:      0.30 ms
+    Median:       0.25 ms
+    Min/Max:      0.22 / 3.55 ms
+    Throughput:   3,183.85 ops/sec
+
+ = 70
+  📈 Summary
+   = 70
+  Simple box (3 lines)                       5,705.21 ops/sec
+  Titled box                                 3,935.82 ops/sec
+  Box with shadow                            3,797.49 ops/sec
+  Colorized border                           6,715.89 ops/sec
+  Nested boxes (2 levels)                    3,996.56 ops/sec
+  Side-by-side (2 boxes)                     3,183.85 ops/sec
+
+ ━ 70
+  📦 Color System
+   ━ 70
+
+ = 70
+  🚀 Limner Performance Benchmark Suite
+   = 70
+
+📊 Benchmarking: Basic colors (16 colors) (10000 iterations)
+  ✓ Basic colors (16 colors)
+    Iterations:   01,000.00
+    Total time:   65.81 ms
+    Average:      0.01 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 1.56 ms
+    Throughput:   671,920.67 ops/sec
+
+📊 Benchmarking: 256-color palette (1000 iterations)
+  ✓ 256-color palette
+    Iterations:   1,000.00
+    Total time:   12.59 ms
+    Average:      0.02 ms
+    Median:       0.02 ms
+    Min/Max:      0.02 / 0.12 ms
+    Throughput:   64,413.87 ops/sec
+
+📊 Benchmarking: RGB truecolor (500 iterations)
+  ✓ RGB truecolor
+    Iterations:   005.00
+    Total time:   61.28 ms
+    Average:      0.03 ms
+    Median:       0.03 ms
+    Min/Max:      0.03 / 0.15 ms
+    Throughput:   03,817.89 ops/sec
+
+📊 Benchmarking: Nested color application (10000 iterations)
+  ✓ Nested color application
+    Iterations:   01,000.00
+    Total time:   12.53 ms
+    Average:      0.00 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 0.10 ms
+    Throughput:   464,654.56 ops/sec
+
+ = 70
+  📈 Summary
+   = 70
+  Basic colors (16 colors)                 671,920.67 ops/sec
+  256-color palette                         64,413.87 ops/sec
+  RGB truecolor                             03,817.89 ops/sec
+  Nested color application                 464,654.56 ops/sec
+
+ ━ 70
+  📦 Event Processing
+   ━ 70
+
+ = 70
+  🚀 Limner Performance Benchmark Suite
+   = 70
+
+📊 Benchmarking: Parse simple key (a-z) (50000 iterations)
+  ✓ Parse simple key (a-z)
+    Iterations:   05,000.00
+    Total time:   481.64 ms
+    Average:      0.00 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 1.78 ms
+    Throughput:   072,008.69 ops/sec
+
+📊 Benchmarking: Parse special key (arrows) (50000 iterations)
+  ✓ Parse special key (arrows)
+    Iterations:   05,000.00
+    Total time:   411.91 ms
+    Average:      0.00 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 1.71 ms
+    Throughput:   534,411.03 ops/sec
+
+📊 Benchmarking: Parse Ctrl+key (50000 iterations)
+  ✓ Parse Ctrl+key
+    Iterations:   05,000.00
+    Total time:   631.69 ms
+    Average:      0.00 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 2.15 ms
+    Throughput:   563,897.31 ops/sec
+
+📊 Benchmarking: Key matching (50000 iterations)
+  ✓ Key matching
+    Iterations:   05,000.00
+    Total time:   911.72 ms
+    Average:      0.00 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 2.37 ms
+    Throughput:   714,526.07 ops/sec
+
+📊 Benchmarking: Dispatch event with handler (10000 iterations)
+  ✓ Dispatch event with handler
+    Iterations:   01,000.00
+    Total time:   43.35 ms
+    Average:      0.00 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 0.10 ms
+    Throughput:   192,431.71 ops/sec
+
+ = 70
+  📈 Summary
+   = 70
+  Parse simple key (a-z)                   072,008.69 ops/sec
+  Parse special key (arrows)               534,411.03 ops/sec
+  Parse Ctrl+key                           563,897.31 ops/sec
+  Key matching                             714,526.07 ops/sec
+  Dispatch event with handler              192,431.71 ops/sec
+
+ ━ 70
+  📦 Layout Calculation
+   ━ 70
+
+ = 70
+  🚀 Limner Performance Benchmark Suite
+   = 70
+
+📊 Benchmarking: Simple stack (3 components) (10000 iterations)
+  ✓ Simple stack (3 components)
+    Iterations:   01,000.00
+    Total time:   872.99 ms
+    Average:      0.03 ms
+    Median:       0.02 ms
+    Min/Max:      0.02 / 1.10 ms
+    Throughput:   53,348.27 ops/sec
+
+📊 Benchmarking: Complex stack (20 components) (5000 iterations)
+  ✓ Complex stack (20 components)
+    Iterations:   5,000.00
+    Total time:   046.16 ms
+    Average:      0.13 ms
+    Median:       0.12 ms
+    Min/Max:      0.10 / 4.62 ms
+    Throughput:   7,018.60 ops/sec
+
+📊 Benchmarking: Horizontal split (3 sections) (10000 iterations)
+  ✓ Horizontal split (3 sections)
+    Iterations:   01,000.00
+    Total time:   582.31 ms
+    Average:      0.03 ms
+    Median:       0.02 ms
+    Min/Max:      0.02 / 0.97 ms
+    Throughput:   53,940.82 ops/sec
+
+📊 Benchmarking: Grid layout (12 items, 3 cols) (10000 iterations)
+  ✓ Grid layout (12 items, 3 cols)
+    Iterations:   01,000.00
+    Total time:   29.20 ms
+    Average:      0.01 ms
+    Median:       0.01 ms
+    Min/Max:      0.01 / 0.87 ms
+    Throughput:   801,064.83 ops/sec
+
+📊 Benchmarking: Nested layout (3 levels deep) (5000 iterations)
+  ✓ Nested layout (3 levels deep)
+    Iterations:   5,000.00
+    Total time:   781.02 ms
+    Average:      0.04 ms
+    Median:       0.03 ms
+    Min/Max:      0.03 / 0.77 ms
+    Throughput:   62,537.77 ops/sec
+
+ = 70
+  📈 Summary
+   = 70
+  Simple stack (3 components)               53,348.27 ops/sec
+  Complex stack (20 components)              7,018.60 ops/sec
+  Horizontal split (3 sections)             53,940.82 ops/sec
+  Grid layout (12 items, 3 cols)           801,064.83 ops/sec
+  Nested layout (3 levels deep)             62,537.77 ops/sec
+
+ ━ 70
+  📦 Render & Diff Algorithm
+   ━ 70
+
+ = 70
+  🚀 Limner Performance Benchmark Suite
+   = 70
+
+📊 Benchmarking: Diff: No changes (80x24) (10000 iterations)
+  ✓ Diff: No changes (80x24)
+    Iterations:   01,000.00
+    Total time:   8,924.67 ms
+    Average:      0.84 ms
+    Median:       0.76 ms
+    Min/Max:      0.70 / 4.64 ms
+    Throughput:   1,681.29 ops/sec
+
+📊 Benchmarking: Diff: Full screen change (1920 cells) (5000 iterations)
+  ✓ Diff: Full screen change (1920 cells)
+    Iterations:   5,000.00
+    Total time:   5,035.94 ms
+    Average:      1.11 ms
+    Median:       1.02 ms
+    Min/Max:      0.94 / 5.21 ms
+    Throughput:   409.01 ops/sec
+
+📊 Benchmarking: Diff: Partial change (100 cells) (10000 iterations)
+  ✓ Diff: Partial change (100 cells)
+    Iterations:   01,000.00
+    Total time:   9,113.16 ms
+    Average:      0.93 ms
+    Median:       0.84 ms
+    Min/Max:      0.76 / 4.77 ms
+    Throughput:   1,370.98 ops/sec
+
+📊 Benchmarking: Buffer update (10 cells) (10000 iterations)
+  ✓ Buffer update (10 cells)
+    Iterations:   01,000.00
+    Total time:   68.18 ms
+    Average:      0.01 ms
+    Median:       0.01 ms
+    Min/Max:      0.01 / 2.69 ms
+    Throughput:   611,240.93 ops/sec
+
+ = 70
+  📈 Summary
+   = 70
+  Diff: No changes (80x24)                   1,681.29 ops/sec
+  Diff: Full screen change (1920 cells)        409.01 ops/sec
+  Diff: Partial change (100 cells)           1,370.98 ops/sec
+  Buffer update (10 cells)                 611,240.93 ops/sec
+
+ ━ 70
+  📦 State Management (Atom Operations)
+   ━ 70
+
+ = 70
+  🚀 Limner Performance Benchmark Suite
+   = 70
+
+📊 Benchmarking: Atom deref (root + nested) (50000 iterations)
+  ✓ Atom deref (root + nested)
+    Iterations:   05,000.00
+    Total time:   36.52 ms
+    Average:      0.00 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 1.11 ms
+    Throughput:   787,512.28 ops/sec
+
+📊 Benchmarking: Atom swap! (update) (20000 iterations)
+  ✓ Atom swap! (update)
+    Iterations:   02,000.00
+    Total time:   62.48 ms
+    Average:      0.00 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 1.09 ms
+    Throughput:   557,993.12 ops/sec
+
+📊 Benchmarking: Atom swap! with assoc-in (3 levels) (20000 iterations)
+  ✓ Atom swap! with assoc-in (3 levels)
+    Iterations:   02,000.00
+    Total time:   92.81 ms
+    Average:      0.00 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 0.52 ms
+    Throughput:   076,399.12 ops/sec
+
+📊 Benchmarking: Atom watchers (add, trigger, remove) (10000 iterations)
+  ✓ Atom watchers (add, trigger, remove)
+    Iterations:   01,000.00
+    Total time:   91.05 ms
+    Average:      0.00 ms
+    Median:       0.00 ms
+    Min/Max:      0.00 / 0.72 ms
+    Throughput:   425,698.44 ops/sec
+
+ = 70
+  📈 Summary
+   = 70
+  Atom deref (root + nested)               787,512.28 ops/sec
+  Atom swap! (update)                      557,993.12 ops/sec
+  Atom swap! with assoc-in (3 levels)      076,399.12 ops/sec
+  Atom watchers (add, trigger, remove)     425,698.44 ops/sec
+
+ ━ 70
+  📦 Unicode Width Calculation
+   ━ 70
+
+ = 70
+  🚀 Limner Performance Benchmark Suite
+   = 70
+
+📊 Benchmarking: ASCII text width (50000 iterations)
+  ✓ ASCII text width
+    Iterations:   05,000.00
+    Total time:   02,166.62 ms
+    Average:      0.41 ms
+    Median:       0.35 ms
+    Min/Max:      0.31 / 6.07 ms
+    Throughput:   2,914.95 ops/sec
+
+📊 Benchmarking: CJK text width (50000 iterations)
+  ✓ CJK text width
+    Iterations:   05,000.00
+    Total time:   6,375.58 ms
+    Average:      0.13 ms
+    Median:       0.11 ms
+    Min/Max:      0.10 / 4.42 ms
+    Throughput:   7,606.21 ops/sec
+
+📊 Benchmarking: Emoji width (50000 iterations)
+  ✓ Emoji width
+    Iterations:   05,000.00
+    Total time:   21,259.49 ms
+    Average:      0.26 ms
+    Median:       0.22 ms
+    Min/Max:      0.19 / 4.81 ms
+    Throughput:   3,068.26 ops/sec
+
+📊 Benchmarking: Mixed content width (50000 iterations)
+  ✓ Mixed content width
+    Iterations:   05,000.00
+    Total time:   01,228.33 ms
+    Average:      0.22 ms
+    Median:       0.18 ms
+    Min/Max:      0.16 / 4.68 ms
+    Throughput:   4,026.08 ops/sec
+
+ = 70
+  📈 Summary
+   = 70
+  ASCII text width                           2,914.95 ops/sec
+  CJK text width                             7,606.21 ops/sec
+  Emoji width                                3,068.26 ops/sec
+  Mixed content width                        4,026.08 ops/sec
+
+ = 70
+  ✅ All benchmarks completed!
+   = 70

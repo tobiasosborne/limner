@@ -1,2 +1,26 @@
-{:paths ["src"]
- :deps {org.clojure/core.async {:mvn/version "1.6.681"}}}
+{:paths ["src" "test"]
+ :deps {org.clojure/core.async {:mvn/version "1.6.681"}}
+ :tasks
+ {benchmark {:doc "Run performance benchmarks"
+             :task (exec 'limner.benchmarks/-main)}
+
+  benchmark:color {:doc "Run color system benchmarks only"
+                   :task (exec 'limner.benchmarks/-main "color")}
+
+  benchmark:unicode {:doc "Run Unicode width benchmarks only"
+                     :task (exec 'limner.benchmarks/-main "unicode")}
+
+  benchmark:layout {:doc "Run layout calculation benchmarks only"
+                    :task (exec 'limner.benchmarks/-main "layout")}
+
+  benchmark:borders {:doc "Run border rendering benchmarks only"
+                     :task (exec 'limner.benchmarks/-main "borders")}
+
+  benchmark:render {:doc "Run render & diff algorithm benchmarks only"
+                    :task (exec 'limner.benchmarks/-main "render")}
+
+  benchmark:events {:doc "Run event processing benchmarks only"
+                    :task (exec 'limner.benchmarks/-main "events")}
+
+  benchmark:state {:doc "Run state management benchmarks only"
+                   :task (exec 'limner.benchmarks/-main "state")}}}
