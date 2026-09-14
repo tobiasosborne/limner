@@ -8,7 +8,8 @@
 ;; ────────────────────── Environment Detection ──────────────────────
 
 (defn get-env
-  "Get environment variable value, returns nil if not set"
+  "Get environment variable value, returns nil if not set.
+   All detection goes through this function, so tests can stub it."
   [var-name]
   (System/getenv var-name))
 
@@ -42,7 +43,7 @@
   (let [term (str/lower-case (detect-term-type))
         colorterm (detect-color-term)]
     (and (not= term "dumb")
-         (or colorterm
+         (or (some? colorterm)
              (str/includes? term "color")
              (str/includes? term "xterm")
              (str/includes? term "screen")

@@ -1,34 +1,91 @@
 (ns limner.terminal-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [limner.terminal :as term]))
+
+;; ──────────────────────── Environment Stubbing ──────────────────────
+;; Detection reads TERM, COLORTERM, LANG and LC_ALL through term/get-env.
+;; Stub it so results never depend on the environment the tests run in.
+
+(defn- with-env*
+  "Call f with term/get-env returning values from env-map only"
+  [env-map f]
+  (with-redefs [term/get-env (fn [var-name] (get env-map var-name))]
+    (f)))
+
+(defmacro ^:private with-env [env-map & body]
+  `(with-env* ~env-map (fn [] ~@body)))
+
+(def ^:private neutral-env
+  {"TERM" "xterm" "LANG" "en_US.UTF-8"})
+
+(def ^:private env-matrix
+  [{}
+   {"TERM" "xterm-256color" "LANG" "en_US.UTF-8"}
+   {"TERM" "xterm" "COLORTERM" "truecolor"}
+   {"TERM" "xterm" "COLORTERM" "24bit"}
+   {"TERM" "screen" "COLORTERM" ""}
+   {"TERM" "dumb"}
+   {"TERM" "dumb" "COLORTERM" "truecolor" "LC_ALL" "C"}
+   {"TERM" "vt100" "LANG" "C"}])
+
+(use-fixtures :each (fn [f] (with-env* neutral-env f)))
 
 ;; ──────────────────────── Detection Tests ──────────────────────
 
 (deftest test-detect-capabilities
   (testing "Detect capabilities returns a map"
-    (let [caps (term/detect-capabilities)]
-      (is (map? caps))
-      (is (contains? caps :term))
-      (is (contains? caps :ansi-colors))
-      (is (contains? caps :256-colors))
-      (is (contains? caps :truecolor))
-      (is (contains? caps :unicode))
-      (is (contains? caps :box-drawing))
-      (is (contains? caps :mouse))
-      (is (contains? caps :windows)))))
+    (doseq [env env-matrix]
+      (with-env env
+        (let [caps (term/detect-capabilities)]
+          (is (map? caps) (pr-str env))
+          (doseq [k [:term :ansi-colors :256-colors :truecolor :unicode
+                     :box-drawing :mouse :windows]]
+            (is (contains? caps k) (pr-str [env k]))))))))
 
 (deftest test-capability-values
   (testing "All capability values are correct type"
-    (let [caps (term/detect-capabilities)]
-      (is (string? (:term caps)))
-      (is (boolean? (:ansi-colors caps)))
-      (is (boolean? (:256-colors caps)))
-      (is (boolean? (:truecolor caps)))
-      (is (boolean? (:unicode caps)))
-      (is (boolean? (:box-drawing caps)))
-      (is (boolean? (:mouse caps)))
-      (is (boolean? (:windows caps)))
-      (is (string? (:locale caps))))))
+    (doseq [env env-matrix]
+      (with-env env
+        (let [caps (term/detect-capabilities)]
+          (is (string? (:term caps)) (pr-str env))
+          (doseq [k [:ansi-colors :256-colors :truecolor :unicode
+                     :box-drawing :mouse :windows]]
+            (is (boolean? (get caps k)) (pr-str [env k])))
+          (is (string? (:locale caps)) (pr-str env)))))))
+
+(deftest test-color-detection
+  (testing "COLORTERM enables colors unless TERM is dumb"
+    (with-env {"TERM" "xterm" "COLORTERM" "truecolor"}
+      (is (true? (term/supports-ansi-colors?)))
+      (is (true? (term/supports-256-colors?)))
+      (is (true? (term/supports-truecolor?)))
+      (is (= :truecolor (term/select-color-mode))))
+    (with-env {"TERM" "xterm" "COLORTERM" "24bit"}
+      (is (true? (term/supports-ansi-colors?)))
+      (is (true? (term/supports-truecolor?))))
+    (with-env {"TERM" "dumb" "COLORTERM" "truecolor"}
+      (is (false? (term/supports-ansi-colors?)))))
+  (testing "TERM alone"
+    (with-env {"TERM" "xterm-256color"}
+      (is (true? (term/supports-ansi-colors?)))
+      (is (true? (term/supports-256-colors?)))
+      (is (false? (term/supports-truecolor?)))
+      (is (= :256-colors (term/select-color-mode))))
+    (with-env {"TERM" "dumb"}
+      (is (false? (term/supports-ansi-colors?)))
+      (is (= :none (term/select-color-mode))))
+    (with-env {}
+      (is (false? (term/supports-ansi-colors?)))
+      (is (= "unknown" (term/detect-term-type)))
+      (is (false? (term/supports-mouse?)))))
+  (testing "Locale"
+    (with-env {"LANG" "en_US.UTF-8"}
+      (is (true? (term/supports-unicode?))))
+    (with-env {"LANG" "en_US.UTF-8" "LC_ALL" "C"}
+      (is (false? (term/supports-unicode?))))
+    (with-env {}
+      (is (= "C" (term/detect-locale)))
+      (is (= :ascii (term/select-border-style))))))
 
 ;; ──────────────────────── Simulation Tests ──────────────────────
 
@@ -71,12 +128,12 @@
 
 (deftest test-supports-feature
   (testing "Supports feature returns boolean"
-    (is (boolean? (term/supports-feature? :unicode)))
-    (is (boolean? (term/supports-feature? :ansi-colors)))
-    (is (boolean? (term/supports-feature? :256-colors)))
-    (is (boolean? (term/supports-feature? :truecolor)))
-    (is (boolean? (term/supports-feature? :box-drawing)))
-    (is (boolean? (term/supports-feature? :mouse)))))
+    (doseq [env env-matrix
+            feature [:unicode :ansi-colors :256-colors :truecolor
+                     :box-drawing :mouse]]
+      (with-env env
+        (is (boolean? (term/supports-feature? feature))
+            (pr-str [env feature]))))))
 
 (deftest test-select-border-style
   (testing "Select border style based on capabilities"
