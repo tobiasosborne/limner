@@ -11,7 +11,10 @@
                [#"(\"[^\"]*\")"                     :green]
                [#"#?\{[^}]*\}"                      :bright-green]]]
     (reduce (fn [s [re col]]
-              (str/replace s re #(core/color col (second %&))))
+              ;; the replacement fn gets the match string, or a vector
+              ;; [match group1 ...] when the pattern has groups
+              (str/replace s re (fn [m]
+                                  (core/color col (if (string? m) m (first m))))))
             code rules)))
 
 ;; ────────────────────── Panel ──────────────────────
