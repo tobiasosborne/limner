@@ -1,5 +1,6 @@
 (ns limner.components.list
   "List component - scrollable, selectable item lists"
+  (:refer-clojure :exclude [list? empty?])
   (:require [clojure.string :as str]
             [limner.borders :as borders]
             [limner.core :as core]))
@@ -115,7 +116,7 @@
   "Set filter text and reset selection"
   [list-state filter-text]
   (let [new-state (assoc list-state :filter-text filter-text)]
-    (if (empty? (filtered-items new-state))
+    (if (clojure.core/empty? (filtered-items new-state))
       (assoc new-state :selected 0)
       (assoc new-state :selected 0 :scroll-offset 0))))
 

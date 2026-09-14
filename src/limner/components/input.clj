@@ -1,5 +1,6 @@
 (ns limner.components.input
   "Input component - interactive text input fields"
+  (:refer-clojure :exclude [empty?])
   (:require [clojure.string :as str]
             [limner.borders :as borders]
             [limner.core :as core]))
@@ -149,7 +150,7 @@
   "Navigate to previous history entry (up arrow)"
   [input-state]
   (let [{:keys [history history-index]} input-state]
-    (when-not (empty? history)
+    (when-not (clojure.core/empty? history)
       (let [current-idx (or history-index (count history))
             new-idx (max 0 (dec current-idx))]
         (if (< new-idx (count history))
