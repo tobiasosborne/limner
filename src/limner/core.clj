@@ -194,19 +194,34 @@
 
 ;; ────────────────────── Unicode Width Calculation ──────────────────────
 
+;; BMP code points with Emoji_Presentation=Yes (emoji by default, no VS16
+;; needed). Terminals render these at width 2; symbols such as ✓ ⚠ ❤ are
+;; text-presentation by default and stay at width 1.
+(def ^:private bmp-emoji-presentation
+  (set (mapcat (fn [[lo hi]] (range lo (inc hi)))
+               [[0x231A 0x231B] [0x23E9 0x23EC] [0x23F0 0x23F0] [0x23F3 0x23F3]
+                [0x25FD 0x25FE] [0x2614 0x2615] [0x2648 0x2653] [0x267F 0x267F]
+                [0x2693 0x2693] [0x26A1 0x26A1] [0x26AA 0x26AB] [0x26BD 0x26BE]
+                [0x26C4 0x26C5] [0x26CE 0x26CE] [0x26D4 0x26D4] [0x26EA 0x26EA]
+                [0x26F2 0x26F3] [0x26F5 0x26F5] [0x26FA 0x26FA] [0x26FD 0x26FD]
+                [0x2705 0x2705] [0x270A 0x270B] [0x2728 0x2728] [0x274C 0x274C]
+                [0x274E 0x274E] [0x2753 0x2755] [0x2757 0x2757] [0x2795 0x2797]
+                [0x27B0 0x27B0] [0x27BF 0x27BF] [0x2B1B 0x2B1C] [0x2B50 0x2B50]
+                [0x2B55 0x2B55]])))
+
 (defn- char-width
-  "Calculate display width of a single character
+  "Calculate display width of a single code point
 
    Returns:
    - 0 for control characters, zero-width characters, combining marks
    - 1 for most characters (ASCII, Latin, etc.)
-   - 2 for wide characters (CJK, fullwidth forms)
+   - 2 for wide characters (CJK, fullwidth, emoji presentation)
 
    Based on Unicode Standard Annex #11 (East Asian Width)
    and wcwidth implementation"
-  [^Character c]
-  (let [cp (int c)
-        type (Character/getType c)]
+  [cp]
+  (let [cp (int cp)
+        type (Character/getType cp)]
     (cond
       ;; Control characters (C0, C1)
       (or (< cp 0x20) (and (>= cp 0x7F) (< cp 0xA0)))
@@ -224,7 +239,8 @@
           (= type Character/COMBINING_SPACING_MARK))
       0
 
-      ;; Hangul Jamo combining characters
+      ;; Hangul Jamo medial vowels and final consonants (combine with the
+      ;; leading consonant into a single syllable)
       (and (>= cp 0x1160) (<= cp 0x11FF))
       0
 
@@ -232,6 +248,10 @@
       (or (and (>= cp 0xFE00) (<= cp 0xFE0F))
           (and (>= cp 0xE0100) (<= cp 0xE01EF)))
       0
+
+      ;; Hangul Jamo leading consonants
+      (and (>= cp 0x1100) (<= cp 0x115F))
+      2
 
       ;; Wide characters (East Asian Width = W or F)
       ;; CJK Unified Ideographs
@@ -267,11 +287,16 @@
           (and (>= cp 0x30A0) (<= cp 0x30FF)))
       2
 
-      ;; Emoji presentation characters (most common range)
-      ;; Note: This is simplified; full emoji support requires checking
-      ;; Unicode emoji data and handling variation selectors
-      ;; Most true emoji are in the 0x1F000+ range
+      ;; Emoji presentation characters in the BMP (⌚ ⚡ ✅ ⭐ ...)
+      (contains? bmp-emoji-presentation cp)
+      2
+
+      ;; Emoji presentation characters (most common ranges)
+      ;; Most true emoji are in the 0x1F000+ range. Multi-code-point
+      ;; sequences (ZWJ, flags, modifiers) are handled per grapheme
+      ;; cluster in cluster-width.
       (or (and (>= cp 0x1F300) (<= cp 0x1F9FF))   ; Misc Symbols and Pictographs
+          (and (>= cp 0x1FA70) (<= cp 0x1FAFF))   ; Symbols and Pictographs Ext-A
           (and (>= cp 0x1F000) (<= cp 0x1F02F))   ; Mahjong Tiles
           (and (>= cp 0x1F0A0) (<= cp 0x1F0FF))   ; Playing Cards
           (and (>= cp 0x1F100) (<= cp 0x1F2FF)))  ; Enclosed Alphanumeric Supplement
@@ -280,6 +305,37 @@
       ;; Default: narrow character (width 1)
       :else
       1)))
+
+(defn- grapheme-clusters
+  "Split string into grapheme clusters (user-perceived characters)
+
+   Uses the JDK's BreakIterator, which follows UAX #29 extended grapheme
+   clusters (including emoji ZWJ sequences) on JDK 20+ and in babashka."
+  [^String s]
+  (let [bi (doto (java.text.BreakIterator/getCharacterInstance)
+             (.setText s))]
+    (loop [start (.first bi)
+           acc (transient [])]
+      (let [end (.next bi)]
+        (if (= end java.text.BreakIterator/DONE)
+          (persistent! acc)
+          (recur end (conj! acc (subs s start end))))))))
+
+(defn- cluster-width
+  "Calculate display width of a single grapheme cluster
+
+   A cluster renders as one glyph, so its width is that of its base
+   (first) code point; joined code points (ZWJ, skin-tone modifiers,
+   combining marks, second regional indicator of a flag) add nothing.
+   VS16 (U+FE0F) requests emoji presentation, which is width 2 (❤️, 1️⃣)."
+  [^String cluster]
+  (let [base (char-width (.codePointAt cluster 0))]
+    (cond
+      (>= (.indexOf cluster "\uFE0F") 0) 2
+      (pos? base) base
+      ;; Zero-width base (e.g. a prepended format character or CR LF):
+      ;; fall back to the widest code point in the cluster
+      :else (reduce max 0 (map char-width (.toArray (.codePoints cluster)))))))
 
 (defn- strip-ansi
   "Remove ANSI escape sequences from string"
@@ -291,24 +347,28 @@
 
    Handles:
    - ANSI escape codes (stripped, width 0)
+   - Grapheme clusters: emoji ZWJ sequences (👨‍👩‍👧‍👦), flags (🇩🇪),
+     skin-tone modifiers (👍🏽) and keycaps (1️⃣) count as one glyph
    - Wide characters (CJK, fullwidth) - width 2
    - Combining characters - width 0
    - Zero-width characters (ZWJ, ZWNJ, etc.) - width 0
    - Control characters - width 0
-   - Most emoji - width 2
+   - Emoji presentation - width 2
    - Regular characters - width 1
 
    This is the recommended function for calculating string width
    for terminal layout and alignment.
 
-   Note: Complex emoji sequences with ZWJ (Zero Width Joiner) may
-   not be perfectly accurate as they require full grapheme cluster
-   analysis. Most common emoji are handled correctly."
+   Note: actual rendering of emoji sequences still depends on the
+   terminal's font and Unicode version."
   [s]
   (when-not s
     (throw (ex-info "Cannot calculate width of nil string" {:string s})))
-  (let [clean (strip-ansi s)]
-    (reduce + 0 (map char-width clean))))
+  (let [^String clean (strip-ansi s)]
+    (if (every? #(<= 0x20 (int %) 0x7E) clean)
+      ;; Fast path: printable ASCII is always one column per char
+      (.length clean)
+      (reduce + 0 (map cluster-width (grapheme-clusters clean))))))
 
 (defn visible-length
   "Calculate visible length of string, stripping ANSI codes

@@ -222,6 +222,46 @@
     ;; Text style variation selector
     (is (= 1 (core/visible-width "©\uFE0E")))))  ; Copyright symbol + text variation
 
+(deftest test-visible-width-grapheme-clusters
+  (testing "Plain ASCII (one cluster per char)"
+    (is (= 11 (core/visible-width "hello world"))))
+
+  (testing "CJK wide chars"
+    (is (= 6 (core/visible-width "漢字か"))))
+
+  (testing "Combining marks join their base"
+    (is (= 1 (core/visible-width "e\u0301")))        ; e + combining acute
+    (is (= 1 (core/visible-width "a\u0308\u0304")))  ; a + two marks
+    (is (= 4 (core/visible-width "cafe\u0301"))))
+
+  (testing "ZWJ family emoji is one glyph"
+    ;; 👨‍👩‍👧‍👦 = 4 emoji joined by 3 ZWJs (7 code points)
+    (is (= 2 (core/visible-width "👨‍👩‍👧‍👦")))
+    (is (= 2 (core/visible-width "👨\u200D👩\u200D👧\u200D👦")))  ; same, ZWJs escaped
+    (is (= 2 (core/visible-width "🏳\uFE0F\u200D🌈"))))  ; flag + VS16 + ZWJ + rainbow
+
+  (testing "Flags (regional indicator pairs)"
+    (is (= 2 (core/visible-width "🇩🇪")))
+    (is (= 4 (core/visible-width "🇩🇪🇺🇸"))))
+
+  (testing "Skin-tone modifiers"
+    (is (= 2 (core/visible-width "👍🏽")))
+    (is (= 2 (core/visible-width "👋🏿"))))
+
+  (testing "Variation selectors and keycaps"
+    (is (= 1 (core/visible-width "❤")))              ; text presentation default
+    (is (= 2 (core/visible-width "❤\uFE0F")))        ; VS16 requests emoji presentation
+    (is (= 2 (core/visible-width "1\uFE0F\u20E3"))))  ; keycap one
+
+  (testing "BMP emoji with default emoji presentation"
+    (is (= 2 (core/visible-width "✅")))
+    (is (= 2 (core/visible-width "⚡"))))
+
+  (testing "Emoji sequences mixed with text and ANSI codes"
+    (is (= 8 (core/visible-width "Hi 👨‍👩‍👧‍👦 🇩🇪")))  ; 2 + 1 + 2 + 1 + 2
+    (is (= 2 (core/visible-width (core/color :red "👍🏽"))))
+    (is (= 8 (core/visible-width (str (core/color :bold "🇩🇪") " ok " (core/color :green "日")))))))
+
 (deftest test-visible-width-fullwidth
   (testing "Fullwidth ASCII forms (width 2)"
     ;; Fullwidth Latin letters
