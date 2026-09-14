@@ -64,6 +64,7 @@
 
   (println))
 
-(when (or (System/getProperty "babashka.version")
-          (= *file* (System/getProperty "babashka.file")))
+;; Run the demo only when this file is the script (bb src/limner.clj),
+;; not when the namespace is required.
+(when (= *file* (System/getProperty "babashka.file"))
   (-main))
