@@ -1,26 +1,31 @@
 {:paths ["src" "test"]
  :deps {org.clojure/core.async {:mvn/version "1.6.681"}}
  :tasks
- {benchmark {:doc "Run performance benchmarks"
-             :task (exec 'limner.benchmarks/-main)}
+ {:requires ([limner.benchmarks :as bench])
+
+  ;; Call -main directly: babashka's `exec` passes -main a parsed-args map
+  ;; (and merges any extra argument into it as if it were a map).
+
+  benchmark {:doc "Run performance benchmarks (optionally: bb benchmark <suite>)"
+             :task (apply bench/-main *command-line-args*)}
 
   benchmark:color {:doc "Run color system benchmarks only"
-                   :task (exec 'limner.benchmarks/-main "color")}
+                   :task (bench/-main "color")}
 
   benchmark:unicode {:doc "Run Unicode width benchmarks only"
-                     :task (exec 'limner.benchmarks/-main "unicode")}
+                     :task (bench/-main "unicode")}
 
   benchmark:layout {:doc "Run layout calculation benchmarks only"
-                    :task (exec 'limner.benchmarks/-main "layout")}
+                    :task (bench/-main "layout")}
 
   benchmark:borders {:doc "Run border rendering benchmarks only"
-                     :task (exec 'limner.benchmarks/-main "borders")}
+                     :task (bench/-main "borders")}
 
   benchmark:render {:doc "Run render & diff algorithm benchmarks only"
-                    :task (exec 'limner.benchmarks/-main "render")}
+                    :task (bench/-main "render")}
 
   benchmark:events {:doc "Run event processing benchmarks only"
-                    :task (exec 'limner.benchmarks/-main "events")}
+                    :task (bench/-main "events")}
 
   benchmark:state {:doc "Run state management benchmarks only"
-                   :task (exec 'limner.benchmarks/-main "state")}}}
+                   :task (bench/-main "state")}}}
