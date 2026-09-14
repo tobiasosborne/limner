@@ -197,7 +197,7 @@ Each layer maintains **strict upward dependency**—lower layers have no knowled
 Add to `deps.edn`:
 
 ```clojure
-{:deps {io.github.yourusername/limner {:git/tag "v1.0.0" :git/sha "..."}}}
+{:deps {io.github.tobiasosborne/limner {:git/sha "<full commit sha>"}}}
 ```
 
 ### For Babashka Scripts
@@ -205,7 +205,7 @@ Add to `deps.edn`:
 Add to `bb.edn`:
 
 ```clojure
-{:deps {io.github.yourusername/limner {:git/tag "v1.0.0" :git/sha "..."}}}
+{:deps {io.github.tobiasosborne/limner {:git/sha "<full commit sha>"}}}
 ```
 
 Or use directly in scripts:
@@ -213,7 +213,7 @@ Or use directly in scripts:
 ```clojure
 #!/usr/bin/env bb
 (require '[babashka.deps :as deps])
-(deps/add-deps '{:deps {io.github.yourusername/limner {:git/tag "v1.0.0" :git/sha "..."}}})
+(deps/add-deps '{:deps {io.github.tobiasosborne/limner {:git/sha "<full commit sha>"}}})
 ```
 
 ## Quick Start
@@ -407,7 +407,7 @@ Each piece works independently yet combines harmoniously.
 Run the complete test suite:
 
 ```bash
-bb test
+clojure -M:test
 ```
 
 Run specific module tests:

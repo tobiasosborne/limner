@@ -1,6 +1,7 @@
 (ns limner.render
   "Efficient render loop with diff-based updates and double buffering"
-  (:require [clojure.string :as str]
+  (:require [clojure.java.shell]
+            [clojure.string :as str]
             [limner.core :as core]))
 
 ;; ────────────────────── Screen Buffer ──────────────────────
