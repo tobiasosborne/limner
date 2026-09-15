@@ -160,6 +160,12 @@
              (unicode/extended-pictographic? cp)))
       (is (= (binary-property-at @raw-emoji-presentation cp)
              (unicode/emoji-presentation? cp)))
+      (is (= (boolean
+              (some (fn [{:keys [start end fields]}]
+                      (when (and (= "Emoji_Modifier" (first fields))
+                                 (<= start cp end)) true))
+                    @raw-emoji))
+             (unicode/emoji-modifier? cp)))
       (is (= (binary-property-at @raw-default-ignorable cp)
              (unicode/default-ignorable? cp)))
       (is (= (incb-at cp) (unicode/incb cp)))
@@ -171,6 +177,8 @@
          (mapv unicode/east-asian-width [0x3000 0x2630 0x2713 0x1F170])))
   (is (= [true false]
          (mapv unicode/emoji-presentation? [0x26A1 0x2764])))
+  (is (= [true false]
+         (mapv unicode/emoji-modifier? [0x1F3FD 0x1F44D])))
   (is (= [true true]
          (mapv unicode/default-ignorable? [0x00AD 0xFEFF])))
   (is (= [:ZWJ :Regional_Indicator]

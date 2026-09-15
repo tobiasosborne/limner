@@ -13,6 +13,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   data, checksums, an offline integrity test, and a guarded refresh command.
 - Added deterministic Unicode table generation and binary-searched property
   lookups in `limner.unicode`, without changing legacy width behaviour yet.
+- Defined Unicode 17.0 terminal-width semantics in ADR 0001 and added pure
+  code-point and caller-asserted cluster width functions.
 - Added `bb test` for the babashka suite and `bb check` for the serial JVM,
   babashka, and available lint gates.
 - Added injectable clocks to the experimental render and streaming APIs, and

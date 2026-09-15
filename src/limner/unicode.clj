@@ -70,6 +70,12 @@
   (= :Yes (property-value tables/emoji-presentation-ranges
                           tables/emoji-presentation-values 0 code-point)))
 
+(defn emoji-modifier?
+  "Return whether code-point has the Emoji_Modifier property."
+  [code-point]
+  (= :Yes (property-value tables/emoji-modifier-ranges
+                          tables/emoji-modifier-values 0 code-point)))
+
 (defn default-ignorable?
   "Return whether code-point has Default_Ignorable_Code_Point."
   [code-point]

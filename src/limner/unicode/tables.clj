@@ -1983,6 +1983,12 @@
     0x1FADF 0x1FAEA 1
     0x1FAEF 0x1FAF8 1]))
 
+(def emoji-modifier-values [:No :Yes])
+
+(def ^ints emoji-modifier-ranges
+  (int-array
+   [0x1F3FB 0x1F3FF 1]))
+
 (def default-ignorable-values [:No :Yes])
 
 (def ^ints default-ignorable-ranges

@@ -11,6 +11,7 @@ on the host JDK's Unicode version.
 - `(grapheme-break cp)`
 - `(extended-pictographic? cp)`
 - `(emoji-presentation? cp)`
+- `(emoji-modifier? cp)`
 - `(default-ignorable? cp)`
 - `(incb cp)`
 - `(general-category cp)`
@@ -37,3 +38,20 @@ The generated namespace embeds the source paths and checksums and uses merged,
 flat primitive range tables with binary search. It is an input layer only:
 `limner.core/visible-width` continues to use the legacy rules until the shared
 text layer is switched over.
+
+## Terminal width policy
+
+`limner.unicode.width` implements the pure scalar and single-cluster policy in
+[ADR 0001](../adr/0001-terminal-width-semantics.md):
+
+```clojure
+(require '[limner.unicode.width :as width])
+
+(width/code-point-width 0x2605 {})                     ; => 1
+(width/code-point-width 0x2605 {:ambiguous-width 2})   ; => 2
+(width/cluster-width "❤️" {})                           ; => 2
+```
+
+`cluster-width` assumes its non-empty string is one grapheme cluster; it does
+not perform segmentation. Whole-string width and migration of
+`limner.core/visible-width` remain later text-layer work.

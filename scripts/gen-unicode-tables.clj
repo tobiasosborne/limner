@@ -144,6 +144,10 @@
       :ranges (compile-table :No [:No :Yes] [] (records emoji-file)
                              #(when (= "Emoji_Presentation"
                                        (first (:fields %))) :Yes))}
+     {:name "emoji-modifier" :values [:No :Yes]
+      :ranges (compile-table :No [:No :Yes] [] (records emoji-file)
+                             #(when (= "Emoji_Modifier"
+                                       (first (:fields %))) :Yes))}
      {:name "default-ignorable" :values [:No :Yes]
       :ranges (compile-table :No [:No :Yes] [] (records core-file)
                              #(when (= "Default_Ignorable_Code_Point"
