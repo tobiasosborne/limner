@@ -160,6 +160,15 @@ Numbered, non-negotiable. Re-read after compaction.
     should outlive the conversation is a bead. Never run `bd edit` (it opens
     `$EDITOR` and blocks). `bd prime` prints the full workflow.
 
+    The local Dolt database is git-ignored. Cross-device state travels only
+    through the tracked `.beads/issues.jsonl`: `.githooks/pre-commit` exports
+    and stages it, while `.githooks/post-merge` imports it. On a fresh clone,
+    run `sh scripts/setup-device.sh` once to set `core.hooksPath` and run the
+    non-destructive `bd bootstrap --yes`. The setup script also removes any
+    Dolt `origin` that beads inferred automatically, so tracker sync cannot
+    push behind the owner's back. Never run `bd init --force`; it can discard
+    issue state.
+
 13. **No GitHub CI.** Quality gates run locally. Do not create
     `.github/workflows/` and do not file "add CI" beads; the owner rejects
     automated CI across all repos.
@@ -250,8 +259,10 @@ to make one.
    left over.
 2. Run the quality gates on both runtimes for any code change.
 3. `bd export -o .beads/issues.jsonl` and commit it **with** the code. The
-   bd database itself is git-ignored; the exported JSONL is the only way
-   tracker state reaches another checkout.
+   tracked pre-commit hook repeats that export and stages the JSONL as a
+   safety net. The local Dolt database is git-ignored; the exported JSONL is
+   the only way tracker state reaches another checkout. The post-merge hook
+   imports incoming state, and fresh clones run `sh scripts/setup-device.sh`.
 4. Commit with messages that cite the reference or ADR involved.
 5. Pushing is the owner's call: say the work is committed and ready, and
    let them push unless they have told you otherwise.

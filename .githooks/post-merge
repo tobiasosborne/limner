@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Fold issue state received by a merge into the local beads database.
+set -eu
+
+if command -v bd >/dev/null 2>&1 && [ -f .beads/issues.jsonl ] && [ -d .beads/embeddeddolt ]; then
+  bd import .beads/issues.jsonl
+fi

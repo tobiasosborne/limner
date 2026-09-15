@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+# Keep the tracked issue snapshot current with the local beads database.
+set -eu
+
+if command -v bd >/dev/null 2>&1 && [ -d .beads/embeddeddolt ]; then
+  bd export -q -o .beads/issues.jsonl
+  git add -- .beads/issues.jsonl
+fi

@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "limner",
+  "project_id": "a8c597a1-dac2-4a72-ae05-d463b44d08b3"
+}
