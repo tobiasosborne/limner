@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   lookups in `limner.unicode`, without changing legacy width behaviour yet.
 - Defined Unicode 17.0 terminal-width semantics in ADR 0001 and added pure
   code-point and caller-asserted cluster width functions.
+- Added portable Unicode 17.0 extended-grapheme segmentation, official
+  conformance coverage, property tests, and an optional ICU4J oracle.
 - Added `bb test` for the babashka suite and `bb check` for the serial JVM,
   babashka, and available lint gates.
 - Added injectable clocks to the experimental render and streaming APIs, and

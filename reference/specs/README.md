@@ -6,6 +6,7 @@ These unmodified HTML snapshots are the primary specifications used by
 | Local file | Version | Upstream URL | SHA-256 |
 | --- | --- | --- | --- |
 | `uax11-44.html` | UAX #11 revision 44, Unicode 17.0.0 | `https://www.unicode.org/reports/tr11/tr11-44.html` | `a82167102910152a30e3a3c4984fd5f9b1d8caf47e5d53dc1e1aef050ba4f25e` |
+| `uax29-47.html` | UAX #29 revision 47, Unicode 17.0.0 | `https://www.unicode.org/reports/tr29/tr29-47.html` | `130d4e0d3f9da41bf9ad84bf580b3b92edc83886457cbc5a53b432761fd2c6ed` |
 | `uts51-29.html` | UTS #51 revision 29, Emoji 17.0 | `https://www.unicode.org/reports/tr51/tr51-29.html` | `3b648142de7a17bd66e4263c2ad584c826a893cd39083a41d9549c4c659279e1` |
 
 Both reports are Unicode Products governed by the Unicode Terms of Use linked

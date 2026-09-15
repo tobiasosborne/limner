@@ -34,6 +34,11 @@
   benchmark:unicode {:doc "Run Unicode width benchmarks only"
                      :task (bench/-main "unicode")}
 
+  benchmark:grapheme {:doc "Compare portable and legacy grapheme segmentation"
+                      :task (do
+                              (require 'grapheme-benchmark)
+                              ((resolve 'grapheme-benchmark/-main)))}
+
   benchmark:layout {:doc "Run layout calculation benchmarks only"
                     :task (bench/-main "layout")}
 

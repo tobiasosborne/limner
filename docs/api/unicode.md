@@ -57,3 +57,21 @@ not perform segmentation. A cluster made only from zero-width code points has
 width 1 only when it begins with a non-default-ignorable `Mn` or `Me` mark;
 invisible and structural singleton clusters have width 0. Whole-string width
 and migration of `limner.core/visible-width` remain later text-layer work.
+
+## Extended grapheme clusters
+
+`limner.unicode.grapheme` implements the default extended-grapheme rules from
+Unicode 17.0.0 UAX #29 revision 47:
+
+```clojure
+(require '[limner.unicode.grapheme :as grapheme])
+
+(grapheme/clusters "aé😀")             ; => ["a" "é" "😀"]
+(grapheme/cluster-boundaries "a😀b")   ; => [0 1 3 4]
+```
+
+Boundaries are UTF-16 indices, matching Clojure's string APIs. For consumers
+that only need to count or inspect source ranges, `reduce-clusters` calls a
+four-argument reducing function with the accumulator, original string, start,
+and end index; it does not allocate cluster substrings. A lone UTF-16 surrogate
+is an opaque one-unit cluster and never joins adjacent content.

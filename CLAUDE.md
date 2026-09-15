@@ -244,6 +244,9 @@ to make one.
 - **Tests (babashka):** `bb test`, or `bb test -n limner.core-test` for one
   namespace. Both runtime commands discover every `*_test.clj` namespace under
   `test/`; the benchmarks namespace is not part of either suite.
+- **ICU4J grapheme oracle:** `clojure -M:test:icu` adds the optional ICU4J
+  cross-check. The normal JVM and babashka gates do not load ICU4J and report
+  the oracle as skipped.
 - **All local gates:** `bb check` runs the JVM suite, the babashka suite, then
   `clj-kondo --lint src test` when `clj-kondo` is available, serially and
   fail-fast. A missing optional linter is reported explicitly.

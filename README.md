@@ -13,8 +13,9 @@ limner is pre-release software in the 0.x series. The API may change before
 Unicode width handling is being rebuilt from pinned Unicode data; follow
 [issue #2](https://github.com/tobiasosborne/limner/issues/2) for that work.
 The new [`limner.unicode`](docs/api/unicode.md) namespace exposes generated
-Unicode 17.0.0 property lookups and explicit code-point/cluster width helpers,
-but `visible-width` and components have not been switched to them yet.
+Unicode 17.0.0 property lookups, portable extended-grapheme segmentation, and
+explicit code-point/cluster width helpers, but `visible-width` and components
+have not been switched to them yet.
 Until the shared text layer is replaced, keep these limitations in mind:
 
 - Styles do not nest correctly yet: an inner colour or style can reset an
@@ -179,6 +180,8 @@ Output:
 
 | Namespace | What it does | Status |
 |---|---|---|
+| `limner.unicode` | Generated Unicode 17 property lookups | Core |
+| `limner.unicode.grapheme` | Portable extended grapheme segmentation | Core |
 | `limner.core` | ANSI colours and current display-width helpers | Core |
 | `limner.borders` | Boxes, titled boxes, borders, and shadows | Core |
 | `limner.layout` | Box geometry and stack, split, grid, and overlay layouts | Core |
