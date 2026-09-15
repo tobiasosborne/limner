@@ -1,6 +1,7 @@
 # Limner State API
 
-`limner.state` provides a reactive state management system built on top of Clojure atoms. It offers path-based updates and granular watchers to facilitate building interactive TUI applications.
+`limner.state` is an experimental set of small wrappers around Clojure atoms,
+including path-based updates and watcher helpers.
 
 ## Usage
 
@@ -20,7 +21,8 @@ Creates a new application state atom.
 - `:watchers`: A map of `{watcher-id watcher-fn}`.
 
 **Returns:**
-- A standard Clojure atom extended with watcher tracking metadata.
+- A standard Clojure atom with an additional watcher-registry atom in its
+  metadata.
 
 ### `get-state`
 `(get-state state-atom)`
@@ -34,7 +36,7 @@ Retrieves a value from a nested path within the state.
 
 ## Updates
 
-Helpers for safe, atomic state mutations.
+Thin wrappers around `reset!` and `swap!`.
 
 ### `set-state!`
 `(set-state! state-atom new-value)`
@@ -132,3 +134,5 @@ Creates a state atom that automatically triggers a callback on changes.
 `(bind-to-render state-atom render-control)`
 
 Connects the state to a render loop, forcing a re-render on every state change.
+The render control is called synchronously by the atom watcher on the thread
+that changes the state.

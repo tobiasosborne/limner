@@ -1,5 +1,9 @@
-;; limner.clj – 100% bulletproof, no more broken borders (2025)
 (ns limner
+  "Deprecated compatibility namespace.
+
+  Use `limner.borders` for border drawing and `limner.syntax` for syntax
+  highlighting. A replacement `limner.table` namespace is planned and tracked
+  in beads; until it exists, `table` remains here for compatibility."
   (:require [clojure.string :as str]
             [limner.core :as core]
             [limner.borders :as borders]))

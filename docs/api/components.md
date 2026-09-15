@@ -1,11 +1,12 @@
 # Limner Components API
 
-The `limner.components` namespace provides high-level UI widgets ready for use in your applications.
+This page summarizes the component namespaces. There is no aggregate
+`limner.components` namespace; require each namespace separately.
 
 ## Panel
 `limner.components.panel`
 
-A container component with a border, title, and content area.
+A state map and renderer for bordered content.
 
 ### `panel`
 `(panel & options)`
@@ -18,7 +19,9 @@ Creates a panel component.
 - `:content`: String or vector of strings.
 - `:border-style`: Border style keyword (default `:single`).
 - `:padding`: Inner padding (default 0).
-- `:width`, `:height`: Fixed dimensions.
+- `:height`: Maximum number of rendered content lines.
+- `:width`: Stored in the state and used by collapsed rendering; expanded
+  rendering does not currently enforce it.
 - `:scrollable`: Enable scrolling (default `false`).
 
 ### `render`
@@ -36,7 +39,9 @@ Embeds child panels inside a parent panel.
 ## Input
 `limner.components.input`
 
-Interactive text input field.
+Editable input state and rendering helpers. The namespace does not read
+terminal input or connect itself to the event system. Cursor positions and
+editing operations currently use UTF-16 indexes rather than grapheme clusters.
 
 ### `input`
 `(input & options)`
@@ -84,15 +89,20 @@ Creates a list component.
 - `(set-filter state text)`
 - `(toggle-selection state)`
 
+Selection movement does not automatically update `:scroll-offset`; call
+`adjust-scroll` when the selected item must remain visible.
+
 ---
 
 ## Markdown
 `limner.components.markdown`
 
-Renders Markdown text with ANSI styling.
+An experimental, regex-based Markdown subset that renders ANSI-styled text. It
+is not a CommonMark implementation: underscore-delimited italics can match
+inside identifiers, lists are flat, and fenced code is not syntax-highlighted.
 
 ### `render`
-`(render text & options)`
+`(render text)` or `(render text options-map)`
 
 Parses and renders Markdown text.
 
@@ -127,7 +137,8 @@ Creates a progress bar.
 Creates a loading spinner.
 
 **Options:**
-- `:style`: `:dots`, `:line`, `:arrow`, etc.
+- `:style`: A key in `spinner-styles`, or `:custom` with a non-empty `:frames`
+  sequence.
 
 ### `render`
 `(render component)`
@@ -157,3 +168,7 @@ Creates a status bar.
 `(render statusbar-state)`
 
 Renders the status bar string.
+
+The renderer strips SGR sequences already present in section content and uses
+UTF-16 positions rather than terminal columns, so styled or wide Unicode
+content is not preserved reliably.

@@ -1,6 +1,9 @@
 # Limner Streaming API
 
-`limner.streaming` enables progressive text rendering (typing effects) with integrated syntax highlighting and cursor effects.
+`limner.streaming` is an experimental state machine for progressive text
+rendering with optional syntax highlighting. Positions are UTF-16 indexes, so
+the current implementation can split non-BMP characters and grapheme
+clusters.
 
 ## Usage
 
@@ -31,7 +34,8 @@ Creates a streaming component state map.
 ### `start`
 `(start stream-component)`
 
-Starts the streaming process.
+Sets the component state to `:streaming`; callers must continue invoking
+`tick` themselves.
 
 ### `pause`
 `(pause stream-component)`
@@ -60,7 +64,9 @@ Updates the stream state based on elapsed time. Should be called in your render 
 ### `render`
 `(render stream-component)`
 
-Renders the current visible portion of the stream to a string, applying syntax highlighting and cursor if configured.
+Renders the current visible portion to a string and optionally applies syntax
+highlighting. The cursor is appended only when the component is in the
+`:completed` state and its blink state is visible.
 
 ## Queries
 
@@ -77,4 +83,4 @@ Returns true if currently active.
 ### `progress`
 `(progress stream-component)`
 
-Returns the completion percentage (0-100).
+Returns an integer completion percentage (0-100) based on UTF-16 positions.

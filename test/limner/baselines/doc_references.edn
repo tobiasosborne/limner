@@ -1,22 +1,3 @@
 ;; Known unresolved documentation references recorded by PLAN 0.4.
 ;; Entries may only be removed as documentation is corrected; never add one.
-["docs/tutorial.md core/enable-mouse-tracking!"
- "docs/tutorial.md events/parse-key-event"
- "docs/tutorial.md events/dispatch-event"
- "docs/tutorial.md render/diff-buffers"
- "docs/tutorial.md core/clear-screen"
- "docs/tutorial.md core/move-cursor"
- "docs/tutorial.md core/enable-raw-mode!"
- "docs/tutorial.md core/hide-cursor!"
- "docs/tutorial.md core/read-char"
- "docs/tutorial.md core/show-cursor!"
- "docs/tutorial.md core/disable-raw-mode!"
- "docs/tutorial.md progress/indeterminate-bar"
- "docs/tutorial.md list/move-selection"
- "docs/tutorial.md input/input-field"
- "docs/tutorial.md input/handle-char"
- "docs/tutorial.md input/handle-key"
- "docs/tutorial.md input/text-area"
- "docs/tutorial.md statusbar/status-bar"
- "docs/tutorial.md stream/complete?"
- "docs/tutorial.md stream/skip-to-end"]
+[]

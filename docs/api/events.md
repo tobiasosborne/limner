@@ -1,6 +1,8 @@
 # Limner Events API
 
-`limner.events` handles input processing, including keyboard and mouse events, focus management, and asynchronous event routing.
+`limner.events` is an experimental parser and dispatcher for strings supplied
+by a caller. It does not put a terminal into raw mode, read input, or resolve
+the timing ambiguity between a bare Escape key and a longer escape sequence.
 
 ## Usage
 
@@ -17,10 +19,15 @@ Functions to convert raw terminal input into structured event maps.
 
 Parses raw input string into an event map.
 
+The table is incomplete: Shift-Tab is not recognized, a non-BMP character is
+reported as unknown, and a bare Escape byte is not distinguished from a
+sequence prefix.
+
 **Returns:**
-- Key Event: `{:type :key :key :enter :char nil :modifiers #{:ctrl} ...}`
+- Key Event: `{:type :key :key :ctrl-c :char nil :modifiers #{:ctrl} ...}`
 - Mouse Event: `{:type :mouse :x 10 :y 5 :button :left ...}`
 - Unknown: `{:type :unknown :raw ...}`
+- `nil` for nil or empty input.
 
 **Example:**
 ```clojure
@@ -28,7 +35,7 @@ Parses raw input string into an event map.
 ```
 
 ### `key-combo`
-`(key-combo event-or-spec)`
+`(key-combo event)` or `(key-combo modifier ... key)`
 
 Standardizes key representation into a vector like `[:ctrl :c]`.
 
@@ -89,7 +96,9 @@ The main entry point for synchronous event handling. It orchestrates:
 
 ## Async Event System
 
-Limner supports non-blocking, asynchronous event processing using `core.async`.
+The experimental processor uses `core.async`, but its current `go-loop` calls
+blocking operations. It can also overwrite state changes made concurrently
+between reading and resetting the state atom.
 
 ### `create-async-event-system`
 `(create-async-event-system & options)`

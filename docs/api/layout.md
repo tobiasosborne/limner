@@ -1,6 +1,7 @@
 # Limner Layout API
 
-`limner.layout` provides the engine for positioning and sizing components within the terminal window. It implements a flexible box model with support for hierarchical composition and various constraint types.
+`limner.layout` calculates rectangular positions and sizes from box maps and
+fixed, percent, flex, or auto constraints.
 
 ## Usage
 
@@ -54,12 +55,15 @@ Allocates `p` percent (0-100) of the available space.
 ### `flex`
 `(flex n)`
 
-Allocates a proportional share of the *remaining* space after fixed and percent constraints are resolved. Higher `n` values get more space.
+Allocates a proportional share of the *remaining* space after fixed, percent,
+and auto constraints are resolved. Integer rounding can leave space
+unallocated.
 
 ### `auto`
 `(auto)`
 
-Sizes the component based on its content (min of content size and available space).
+Uses the content map's `:height` in a stack or `:width` in an `hsplit`,
+defaulting to zero. The value is not capped to the available space.
 
 ## Layout Types
 
@@ -131,7 +135,8 @@ Arranges components in a grid structure.
 ### `overlay`
 `(overlay components)`
 
-Overlays components on top of each other. Stacking order is determined by the `:z-index` property of each component's box.
+Overlays components on top of each other. Stacking order is determined by the
+`:z-index` property on each component map.
 
 ## Layout Resolution
 
@@ -152,9 +157,12 @@ Applies the layout specification to the given total dimensions, calculating abso
 ### `clip`
 `(clip content width height)`
 
-Clips string content to fit within the specified dimensions.
+Splits string content into lines, keeps at most `height` lines, and takes at
+most `width` UTF-16 code units from each line. It does not yet clip by terminal
+columns and can split non-BMP characters.
 
 ### `pad-to-box`
 `(pad-to-box lines width height)`
 
-Pads a collection of strings with spaces to fill the specified box dimensions.
+Pads short strings and adds blank lines using UTF-16 string length. It does not
+truncate strings longer than `width` or account for terminal column width.

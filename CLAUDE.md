@@ -23,8 +23,9 @@ experienced Clojure developer). The job now is to turn it into a codebase
 that deserves that attention. The full audit is
 `reviews/2026-09-15/REVIEW.md`; the working plan is
 `reviews/2026-09-15/PLAN.md` (to be converted into beads issues).
-Treat every claim in `README.md`, `docs/`, and `plans/` as unverified until
-you have checked it against the code.
+Treat every claim in `README.md` and active `docs/` as unverified until you
+have checked it against the code. Documents under `docs/archive/2025/` are
+historical and explicitly do not describe the current system.
 
 ## The Laws
 
@@ -155,10 +156,10 @@ Numbered, non-negotiable. Re-read after compaction.
     split them when you touch them, along real seams.
 
 12. **Beads is the only persistent tracker.** `bd ready` at session start,
-    `bd update <id> --claim` before work, `bd close <id>` when done. No
-    markdown TODO lists and no new files under `plans/`. Anything that
-    should outlive the conversation is a bead. Never run `bd edit` (it opens
-    `$EDITOR` and blocks). `bd prime` prints the full workflow.
+    `bd update <id> --claim` before work, `bd close <id>` when done. Never add
+    planning documents; the old ones under `docs/archive/2025/` are historical.
+    Anything that should outlive the conversation is a bead. Never run `bd
+    edit` (it opens `$EDITOR` and blocks). `bd prime` prints the full workflow.
 
     The local Dolt database is git-ignored. Cross-device state travels only
     through the tracked `.beads/issues.jsonl`: `.githooks/pre-commit` exports
@@ -227,9 +228,9 @@ to make one.
 - **Shift-Tab is `ESC [ Z`.** Many keys arrive as multi-byte sequences, and
   a bare `ESC` is ambiguous with the start of a sequence. Key parsing needs
   a timeout-aware reader, not a lookup on one string.
-- **The docs describe functions that do not exist.** As of 2026-09-15,
-  `docs/tutorial.md` calls 20 missing functions and `README.md` calls 4. Check
-  a function exists (`ns-publics`) before citing or using it.
+- **Historical docs describe functions that do not exist.** The archived
+  `docs/archive/2025/tutorial.md` calls 20 missing functions. Check a function
+  exists (`ns-publics`) before citing or using it in active documentation.
 - **`limner` (single-segment namespace) is legacy.** It duplicates
   `limner.syntax`, `limner.borders` and adds a `table`. Do not build on it.
 

@@ -1,6 +1,9 @@
 # Limner Syntax API
 
-`limner.syntax` provides language-aware syntax highlighting with pluggable themes.
+`limner.syntax` is an experimental regex-based highlighter with configurable
+themes. It is not a language parser: keyword recognition can match inside
+identifiers, and several keys present in `language-rules` and the built-in
+themes are not consumed by the tokenizer.
 
 ## Usage
 
@@ -13,7 +16,7 @@
 ### `highlight`
 `(highlight code lang & options)`
 
-Highlights code string for a specific language.
+Applies the configured token colors for a language rule set.
 
 **Parameters:**
 - `code`: The source code string.
@@ -55,7 +58,7 @@ Returns a list of built-in theme names.
 
 ## Language Support
 
-Supported languages:
+Built-in rule sets:
 - `:clojure`
 - `:python`
 - `:javascript`

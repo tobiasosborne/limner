@@ -1,6 +1,8 @@
 # Limner Render API
 
-`limner.render` manages the display update cycle. It uses a double-buffering technique with a differential update algorithm to ensure flicker-free rendering and minimal data transmission to the terminal.
+`limner.render` is an experimental display loop with screen buffers and
+diff-based terminal writes. It currently performs terminal effects directly
+and is not safe for concurrent calls to its render controls.
 
 ## Usage
 
@@ -22,12 +24,14 @@ Starts a background thread (via `future`) that continuously renders the applicat
 - `options`:
   - `:render-fn`: Function `(fn [state])` -> vector of strings. (Required)
   - `:fps`: Target frames per second (default 60).
-  - `:on-frame`: Optional callback `(fn [render-state])` called after each frame.
+  - `:on-frame`: Optional callback `(fn [render-state])` called after each loop
+    iteration.
   - `:on-error`: Optional error handler `(fn [exception])`.
 
 **Returns:**
 A map containing control functions:
-- `:stop!`: Stops the loop (blocks until clean shutdown).
+- `:stop!`: Requests a stop, waits up to two seconds, and may cancel the
+  render future. It rethrows an error retained by the loop.
 - `:force-render!`: Triggers an immediate full redraw.
 - `:get-stats`: Returns rendering statistics map.
 - `:running?`: Checks if the loop is active.
@@ -47,14 +51,18 @@ A map containing control functions:
 ### `render-once`
 `(render-once content-lines)`
 
-Renders a single static frame and immediately cleans up. Useful for testing or simple CLI output.
+Runs terminal setup, renders one static frame, and then restores the terminal.
+These calls are not protected by `finally`, so an exception can prevent
+restoration.
 
 ## Terminal Operations
 
 ### `get-terminal-size`
 `(get-terminal-size)`
 
-Returns the current terminal dimensions as `{:width w :height h}`. It attempts multiple methods (`stty`, `tput`, environment variables) to find accurate values.
+Returns dimensions as `{:width w :height h}`. It tries `stty` and then `tput`,
+falling back to 80×24. Reported widths below 20 and heights below 10 are also
+replaced by those fallback dimensions.
 
 ### `clear-screen`
 `(clear-screen)`
@@ -73,11 +81,14 @@ Creates an empty screen buffer.
 ### `write-string-to-buffer`
 `(write-string-to-buffer buffer x y s)`
 
-Writes a string (parsing ANSI codes) into the buffer at the specified position.
+Writes a string into the buffer at the specified position, recognizing SGR
+color sequences. Each UTF-16 code unit becomes one cell, and other terminal
+control sequences are treated as text.
 
 ## Rendering Internals
 
-Limner's rendering engine minimizes terminal I/O.
+The renderer emits only regions containing changed cells, but finding those
+cells scans the complete new buffer on every diff.
 
 ### Diff Algorithm
 When `render-frame` is called:
@@ -88,9 +99,11 @@ When `render-frame` is called:
 5.  Only these regions are printed to the terminal.
 6.  Buffers are swapped.
 
-This ensures O(changed-pixels) performance rather than O(screen-size).
+Terminal output scales with the dirty regions; diff calculation scales with
+the buffer size.
 
 ### `render-stats`
 `(render-stats state)`
 
-Returns detailed statistics about the render engine (FPS, dirty regions, buffer utilization).
+Returns the frame count, estimated and target FPS, dimensions, and basic front-
+and back-buffer cell counts.

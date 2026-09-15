@@ -10,7 +10,8 @@
 
 ## Color System
 
-Limner supports a comprehensive color system including standard 16-colors, 256-color palette, and 24-bit Truecolor (RGB).
+Limner can generate SGR sequences for the standard 16 colors, the 256-color
+palette, and 24-bit RGB colors.
 
 ### `color`
 `(color color-spec s)`
@@ -18,7 +19,7 @@ Limner supports a comprehensive color system including standard 16-colors, 256-c
 Applies a color to a string. Returns the string wrapped in ANSI escape codes.
 
 **Parameters:**
-- `color-spec`: A keyword (basic color), map (RGB/256), or nested color.
+- `color-spec`: A basic-color keyword or an RGB/256-color map.
 - `s`: The string to colorize.
 
 **Returns:**
@@ -34,9 +35,10 @@ Applies a color to a string. Returns the string wrapped in ANSI escape codes.
 ;; Backgrounds
 (core/color :bg-blue "Blue Background")
 
-;; Nesting (Bold Red)
-(core/color :bold (core/color :red "Bold Red"))
 ```
+
+Each call appends a full SGR reset. Nested calls therefore do not preserve an
+outer style after the inner string ends.
 
 ### `available-colors`
 `(available-colors)`
@@ -99,12 +101,13 @@ A map of semantic color presets.
 
 ## Unicode & String Width
 
-Functions for correctly handling string width in a terminal environment, accounting for CJK characters, emojis, and combining marks.
+The current width functions are legacy approximations. They cover common CJK,
+emoji, and combining-mark cases but are not yet backed by pinned Unicode data.
 
 ### `visible-width`
 `(visible-width s)`
 
-Calculates the display width of a string. This is the **recommended** function for layout calculations.
+Estimates the display width of a string.
 
 **Parameters:**
 - `s`: The string to measure.
@@ -112,10 +115,11 @@ Calculates the display width of a string. This is the **recommended** function f
 **Returns:**
 - Integer width (visual columns).
 
-**Details:**
-- **0 width**: ANSI codes, combining marks, zero-width spaces.
-- **1 width**: Standard ASCII/Latin characters.
-- **2 width**: CJK ideographs, fullwidth forms, most emojis.
+The implementation removes SGR color sequences, uses `BreakIterator` for
+segmentation, and uses hand-maintained width ranges. Other terminal control
+sequences, including OSC hyperlinks and non-SGR CSI sequences, are counted as
+text. Some Unicode properties and grapheme boundaries are also wrong, so do
+not rely on this function for exact terminal-column layout yet.
 
 **Example:**
 ```clojure
@@ -127,7 +131,8 @@ Calculates the display width of a string. This is the **recommended** function f
 ### `visible-length`
 `(visible-length s)`
 
-**DEPRECATED**. Use `visible-width` instead. Calculates string length stripping ANSI codes but counting characters (1 char = 1 width).
+**DEPRECATED**. Use `visible-width` instead. Removes SGR color sequences and
+counts UTF-16 code units; it does not measure terminal columns.
 
 ## Terminal Control
 

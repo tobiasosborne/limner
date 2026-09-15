@@ -1,6 +1,8 @@
 # Limner Terminal API
 
-`limner.terminal` handles feature detection and graceful degradation, ensuring your application works correctly across different terminal emulators (from modern GPU-accelerated ones to legacy TTYs).
+`limner.terminal` provides environment-based capability heuristics and helpers
+for choosing fallback values. It does not probe the terminal or check whether
+the output stream is a TTY.
 
 ## Usage
 
@@ -15,7 +17,9 @@ Functions to inspect the runtime environment.
 ### `detect-capabilities`
 `(detect-capabilities)`
 
-Scans environment variables (`TERM`, `COLORTERM`, `LANG`) to determine supported features.
+Reads `TERM`, `COLORTERM`, `LC_ALL`/`LANG`, and `os.name` to estimate supported
+features. These results are heuristics; they do not account for `NO_COLOR`,
+`FORCE_COLOR`, or the active output stream.
 
 **Returns:**
 A map with boolean flags:
@@ -29,7 +33,8 @@ A map with boolean flags:
 ### `get-capabilities`
 `(get-capabilities)`
 
-Returns the current capabilities map. Caches the result of `detect-capabilities`.
+Returns a dynamically bound capabilities map when one is present; otherwise it
+runs `detect-capabilities` on each call.
 
 ### `supports-feature?`
 `(supports-feature? feature-key)`
@@ -45,7 +50,7 @@ Checks if a specific feature is supported.
 
 ## Graceful Degradation
 
-Helpers to automatically adapt UI based on capabilities.
+Helpers for callers to select values based on the estimated capabilities.
 
 ### `with-fallback`
 `(with-fallback feature value fallback)`

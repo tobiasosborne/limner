@@ -1,3 +1,5 @@
+> **Historical document (archived 2026-09-15).** Written in 2025 by earlier coding agents. It describes plans and APIs that were never built or have since changed, and it contains claims that are not true. It is kept for history only. See `README.md`, `CLAUDE.md` and `reviews/2026-09-15/REVIEW.md` for the current state.
+
 # Limner Architecture
 
 This document describes the architectural design of the Limner library. Limner follows a strictly modular, layered architecture designed to ensure correctness, performance, and composability.

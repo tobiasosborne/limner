@@ -45,7 +45,7 @@ Draws a box around a collection of strings.
   - `:border-style`: Keyword (e.g., `:rounded`) or custom style definition (default `:single`).
 
 **Returns:**
-- A vector of strings representing the boxed content.
+- A sequence of strings representing the boxed content.
 
 **Example:**
 ```clojure
@@ -68,6 +68,10 @@ Draws a box with a title embedded in the top border.
 ```clojure
 (borders/draw-titled-box "Alert" ["System Critical"] :border-style :thick :title-pos :center)
 ```
+
+Content width uses the current `limner.core/visible-width` approximation, but
+title positioning uses string length. Titles containing ANSI sequences or
+wide Unicode characters can therefore misalign.
 
 ## Composition
 
@@ -118,10 +122,12 @@ Adds a heavier, thicker drop shadow (2 characters wide/high).
 ### `colorize-border`
 `(colorize-border box-lines color)`
 
-Applies a color to the border characters of a box while keeping the content uncolored.
+Attempts to color the border characters while leaving the content uncolored.
+The current border-line detection is incomplete: top and bottom lines in
+styles such as `:rounded` and `:thick` are not fully colored.
 
 **Parameters:**
-- `box-lines`: The rendered box (vector of strings).
+- `box-lines`: The rendered box (a collection of strings).
 - `color`: Color specification (keyword, RGB map, etc.).
 
 **Example:**
