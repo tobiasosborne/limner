@@ -120,7 +120,7 @@ handoff, and the R4 brief already says "next-numbered".
    - Context: pmonks posted a full glibc `wcwidth` table on #2; the owner
      replied 2026-09-15 promising a deeper look within days.
    - Issue #2 is open.
-2. **Push the tag:** `git push origin v0.1.0`. Created locally at `01592b2`.
+2. **Tag `v0.1.0`** (legacy baseline, `01592b2`) was pushed at handoff. README's Installation section still says "Once published"; reword it the next time the README changes.
 3. **Optional:** install `clj-kondo` so `bb check` lints.
 
 ## Known concerns and loose ends
