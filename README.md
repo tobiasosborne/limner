@@ -196,6 +196,7 @@ Each layer maintains **strict upward dependency**—lower layers have no knowled
 
 Add to `deps.edn`:
 
+<!-- not-executed: dependency configuration data, not an executable form -->
 ```clojure
 {:deps {io.github.tobiasosborne/limner {:git/sha "<full commit sha>"}}}
 ```
@@ -204,12 +205,14 @@ Add to `deps.edn`:
 
 Add to `bb.edn`:
 
+<!-- not-executed: dependency configuration data, not an executable form -->
 ```clojure
 {:deps {io.github.tobiasosborne/limner {:git/sha "<full commit sha>"}}}
 ```
 
 Or use directly in scripts:
 
+<!-- not-executed: changes the process dependency basis and may access the network -->
 ```clojure
 #!/usr/bin/env bb
 (require '[babashka.deps :as deps])
@@ -275,6 +278,7 @@ Output:
 
 ### Example 4: Interactive Application
 
+<!-- not-executed: starts a long-lived event loop and contains System/exit -->
 ```clojure
 (require '[limner.render :as render]
          '[limner.events :as events]
@@ -340,6 +344,7 @@ Output:
 
 ### Example 6: Progress Indicators
 
+<!-- not-executed: deliberate sleeps make this an animated demonstration -->
 ```clojure
 (require '[limner.components.progress :as progress])
 

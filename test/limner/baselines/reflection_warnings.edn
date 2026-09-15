@@ -1,0 +1,20 @@
+;; Known JVM reflection warnings recorded by PLAN 0.4.
+;; Entries may only be removed as reflection is fixed; never add one.
+["limner/components/markdown.clj | call to method indexOf can't be resolved (target class is unknown)."
+ "limner/components/markdown.clj | call to method indexOf can't be resolved (target class is unknown)."
+ "limner/components/markdown.clj | call to method indexOf can't be resolved (target class is unknown)."
+ "limner/components/markdown.clj | call to method indexOf can't be resolved (target class is unknown)."
+ "limner/components/markdown.clj | call to method indexOf can't be resolved (target class is unknown)."
+ "limner/components/markdown.clj | call to method indexOf can't be resolved (target class is unknown)."
+ "limner/components/markdown.clj | call to method indexOf can't be resolved (target class is unknown)."
+ "limner/components/markdown.clj | call to method indexOf can't be resolved (target class is unknown)."
+ "limner/components/statusbar.clj | reference to field getHour can't be resolved."
+ "limner/components/statusbar.clj | reference to field getMinute can't be resolved."
+ "limner/components/statusbar.clj | reference to field getSecond can't be resolved."
+ "limner/events.clj | call to static method isUpperCase on java.lang.Character can't be resolved (argument types: unknown)."
+ "limner/events.clj | call to static method isUpperCase on java.lang.Character can't be resolved (argument types: unknown)."
+ "limner/events.clj | call to method indexOf on java.lang.Object can't be resolved (no such method)."
+ "limner/events.clj | call to method indexOf on java.lang.Object can't be resolved (no such method)."
+ "limner/render.clj | call to method indexOf can't be resolved (target class is unknown)."
+ "limner/render.clj | call to method indexOf can't be resolved (target class is unknown)."
+ "limner/render.clj | call to static method sleep on java.lang.Thread can't be resolved (argument types: unknown)."]

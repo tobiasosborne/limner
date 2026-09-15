@@ -1,7 +1,15 @@
 {:paths ["src" "test"]
  :deps {org.clojure/core.async {:mvn/version "1.6.681"}}
  :tasks
- {:requires ([limner.benchmarks :as bench])
+ {:requires ([limner.benchmarks :as bench]
+             [limner.check :as check]
+             [limner.test-runner :as test-runner])
+
+  test {:doc "Run every test namespace (optionally: bb test -n namespace)"
+        :task (apply test-runner/-main *command-line-args*)}
+
+  check {:doc "Run JVM tests, babashka tests, then available lint"
+         :task (check/-main)}
 
   ;; Call -main directly: babashka's `exec` passes -main a parsed-args map
   ;; (and merges any extra argument into it as if it were a map).

@@ -27,6 +27,13 @@ verified on both runtimes.
 needs the owner to approve the exact text immediately before anything is
 posted (CLAUDE.md Rule 14).
 
+**Delegation (owner directive, 2026-09-15):** the owner has no strong
+preference on design decisions and delegates them to the orchestrator:
+"make the respectful, experienced senior engineer call". New decisions are
+made by the orchestrator and recorded in an ADR or the relevant bead. The
+one exception is public text: the owner sees the exact text of every GitHub
+comment, issue or PR before it is posted.
+
 **Execution policy (owner directive, 2026-09-15):** work is orchestrated
 serially, one task at a time. Each task is implemented by a Codex
 `gpt-5.6-sol` subagent at `xhigh` reasoning effort; no parallel subagents.

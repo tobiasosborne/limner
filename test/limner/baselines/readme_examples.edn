@@ -1,0 +1,5 @@
+;; Known failing README Clojure blocks recorded by PLAN 0.4.
+;; Entries may only be removed as examples are corrected; never add one.
+["5. Composability | unresolved symbol: nest-panels"
+ "Example 3: Layout Composition | invalid argument: Invalid height: must be non-negative integer"
+ "Example 5: Streaming Text with Syntax Highlighting | unresolved symbol: stream/complete?"]

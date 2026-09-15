@@ -240,9 +240,16 @@ to make one.
   semantics anywhere without checking.
 - **Tests (JVM):** `clojure -M:test`, or `clojure -M:test -n limner.core-test`
   for one namespace.
-- **Tests (babashka):** there is no `bb test` task yet (PLAN.md Phase 0 adds
-  one). Until it lands, run the namespaces with `clojure.test/run-tests`
-  from a scratch script, and say in your report that you did.
+- **Tests (babashka):** `bb test`, or `bb test -n limner.core-test` for one
+  namespace. Both runtime commands discover every `*_test.clj` namespace under
+  `test/`; the benchmarks namespace is not part of either suite.
+- **All local gates:** `bb check` runs the JVM suite, the babashka suite, then
+  `clj-kondo --lint src test` when `clj-kondo` is available, serially and
+  fail-fast. A missing optional linter is reported explicitly.
+- **README examples:** every `clojure` or `clj` fence is executed in isolation.
+  A block that cannot safely run in a test needs
+  `<!-- not-executed: reason -->` immediately before its opening fence. The
+  reason must name the concrete side effect or blocking behaviour.
 - **Babashka tasks:** `bb tasks` lists them; the benchmarks are
   `bb benchmark[:suite]`.
 - **Reflection:** loading every namespace with `*warn-on-reflection*` on
