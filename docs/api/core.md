@@ -37,8 +37,10 @@ Applies a color to a string. Returns the string wrapped in ANSI escape codes.
 
 ```
 
-Each call appends a full SGR reset. Nested calls therefore do not preserve an
-outer style after the inner string ends.
+Each call parses existing ANSI through `limner.text`, applies the requested
+style to spans where that key is absent, and returns canonical ANSI. Nested
+calls therefore restore an outer style after an inner span instead of emitting
+a reset in the middle.
 
 ### `available-colors`
 `(available-colors)`
@@ -101,13 +103,14 @@ A map of semantic color presets.
 
 ## Unicode & String Width
 
-The current width functions are legacy approximations. They cover common CJK,
-emoji, and combining-mark cases but are not yet backed by pinned Unicode data.
+The compatibility width function uses the Unicode 17 text layer. New code that
+also needs slicing, padding, truncation, or wrapping should require
+`limner.text` directly.
 
 ### `visible-width`
 `(visible-width s)`
 
-Estimates the display width of a string.
+Returns the display width of an ANSI string or styled-text value.
 
 **Parameters:**
 - `s`: The string to measure.
@@ -115,12 +118,10 @@ Estimates the display width of a string.
 **Returns:**
 - Integer width (visual columns).
 
-The implementation removes controls through `limner.ansi`, then uses
-`BreakIterator` for segmentation and hand-maintained width ranges. OSC
-hyperlinks, non-SGR CSI sequences, and other recognized ECMA-48 controls are
-therefore zero-width. Some Unicode properties and grapheme boundaries remain
-wrong until PLAN 1.6 switches this function to the new Unicode text foundation,
-so do not rely on it for exact terminal-column layout yet.
+This delegates to `limner.text/width`: ANSI controls are zero-width, grapheme
+clusters follow UAX #29 revision 47, and widths follow ADR 0001. The default
+ambiguous-width policy is one column; use `limner.text/width` directly to pass
+the explicit two-column option.
 
 **Example:**
 ```clojure
@@ -133,7 +134,7 @@ so do not rely on it for exact terminal-column layout yet.
 `(visible-length s)`
 
 **DEPRECATED**. Use `visible-width` instead. Removes ECMA-48 controls and counts
-UTF-16 code units; it does not measure terminal columns.
+Unicode code points; it does not measure grapheme clusters or terminal columns.
 
 ## Terminal Control
 

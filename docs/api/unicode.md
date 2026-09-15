@@ -35,9 +35,9 @@ bb test -n limner.unicode-test
 ```
 
 The generated namespace embeds the source paths and checksums and uses merged,
-flat primitive range tables with binary search. It is an input layer only:
-`limner.core/visible-width` continues to use the legacy rules until the shared
-text layer is switched over.
+flat primitive range tables with binary search. `limner.text` combines these
+properties with grapheme segmentation and ANSI-aware column operations;
+`limner.core/visible-width` delegates to that layer.
 
 ## Terminal width policy
 
@@ -56,7 +56,7 @@ text layer is switched over.
 not perform segmentation. A cluster made only from zero-width code points has
 width 1 only when it begins with a non-default-ignorable `Mn` or `Me` mark;
 invisible and structural singleton clusters have width 0. Whole-string width
-and migration of `limner.core/visible-width` remain later text-layer work.
+is available as `limner.text/width`.
 
 ## Extended grapheme clusters
 

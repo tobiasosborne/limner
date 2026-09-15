@@ -18,6 +18,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added portable Unicode 17.0 extended-grapheme segmentation, official
   conformance coverage, property tests, and an optional ICU4J oracle.
 - Added one lossless ECMA-48 tokenizer with structured SGR and OSC 8 helpers.
+- Added canonical styled text with semantic ANSI/OSC 8 parsing and rendering,
+  grapheme-safe slicing, padding, centering, truncation, wrapping, and lines.
 - Added `bb test` for the babashka suite and `bb check` for the serial JVM,
   babashka, and available lint gates.
 - Added injectable clocks to the experimental render and streaming APIs, and
@@ -31,6 +33,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `limner.syntax`, and `limner.components.markdown` as experimental.
 - Archived the historical 2025 tutorial, architecture, and planning documents;
   corrected the active API documentation against the implementation.
+- Made deprecated `visible-length` count Unicode code points after removing
+  controls, instead of counting UTF-16 code units.
 
 ### Fixed
 
@@ -38,6 +42,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   width while retaining the explicit isolated-combining-mark fallback.
 - Made non-SGR CSI sequences, OSC 8 hyperlinks, and other ECMA-48 controls
   zero-width everywhere that previously used the SGR-only regular expression.
+- Made `visible-width` follow the pinned Unicode 17 width policy and portable
+  grapheme segmenter, including the REVIEW C1 probes (#2, reported by @pmonks).
+- Made nested `core/color` calls restore outer styles through the styled-text
+  model rather than clearing them with an inner full reset.
 
 ### Deprecated
 

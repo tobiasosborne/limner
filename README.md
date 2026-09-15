@@ -10,18 +10,15 @@ who illuminated manuscripts with borders, colour, and careful lettering.
 limner is pre-release software in the 0.x series. The API may change before
 1.0, and the library supports both the JVM and babashka.
 
-Unicode width handling is being rebuilt from pinned Unicode data; follow
-[issue #2](https://github.com/tobiasosborne/limner/issues/2) for that work.
-The new [`limner.unicode`](docs/api/unicode.md) namespace exposes generated
-Unicode 17.0.0 property lookups, portable extended-grapheme segmentation, and
-explicit code-point/cluster width helpers, but `visible-width` and components
-have not been switched to them yet.
-The new [`limner.ansi`](docs/api/ansi.md) namespace is the shared, lossless
-ECMA-48 tokenizer used wherever controls must be removed from text.
-Until the shared text layer is replaced, keep these limitations in mind:
+Unicode width handling is grounded in pinned Unicode 17.0.0 data; follow
+[issue #2](https://github.com/tobiasosborne/limner/issues/2) for its measured
+conformance work. [`limner.text`](docs/api/text.md) provides styled spans,
+portable grapheme segmentation, exact terminal width, safe slicing, padding,
+truncation, and wrapping. [`limner.ansi`](docs/api/ansi.md) is the shared,
+lossless ECMA-48 tokenizer beneath it.
+Components have not moved to the text layer yet, so keep these limitations in
+mind:
 
-- Styles do not nest correctly yet: an inner colour or style can reset an
-  outer one.
 - Components can misalign or clip text containing CJK characters, emoji, or
   existing ANSI colours.
 - The render buffer still stores UTF-16 code units rather than grapheme cells,
@@ -62,8 +59,8 @@ Merge the same entry into that map:
 ## Quick start
 
 Each example below runs as written on the JVM and on babashka. The box and
-component examples deliberately use ASCII content while Unicode width work is
-in progress.
+component examples deliberately use ASCII content until those components move
+to the styled-text column operations.
 
 ### A bordered box
 
@@ -87,7 +84,8 @@ Output:
 
 `core/color` returns a string containing ANSI escapes. This example makes the
 escape byte visible as `<ESC>` so its output is readable here; print `rendered`
-directly to let a terminal display the word in green.
+directly to let a terminal display the word in green. Nested calls preserve
+outer attributes through the styled-text layer.
 
 ```clojure
 (require '[clojure.string :as str]

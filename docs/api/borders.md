@@ -69,9 +69,10 @@ Draws a box with a title embedded in the top border.
 (borders/draw-titled-box "Alert" ["System Critical"] :border-style :thick :title-pos :center)
 ```
 
-Content width uses the current `limner.core/visible-width` approximation, but
-title positioning uses string length. Titles containing ANSI sequences or
-wide Unicode characters can therefore misalign.
+Content width now uses the Unicode 17 `limner.text/width` path through
+`limner.core/visible-width`, but title positioning still uses string length.
+Titles containing ANSI sequences or wide Unicode characters can therefore
+misalign until the component migration phase.
 
 ## Composition
 

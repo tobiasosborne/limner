@@ -98,11 +98,10 @@
              (str errors))))))
 
 (deftest test-color-nesting
-  (testing "Colors can be nested"
-    (let [result (core/color :bold (core/color :red "Bold Red"))]
-      (is (clojure.string/includes? result "\u001B[1m"))
-      (is (clojure.string/includes? result "\u001B[31m"))
-      (is (clojure.string/includes? result "Bold Red")))))
+  (testing "an inner reset does not clear the outer style"
+    (is (= "\u001B[1;31mR\u001B[39m after\u001B[0m"
+           (core/color :bold
+                       (str (core/color :red "R") " after"))))))
 
 ;; ──────────────────────── Helper Function Tests ──────────────────────
 
@@ -155,6 +154,11 @@
 
   (testing "String with only ANSI codes"
     (is (= 0 (core/visible-length "\u001B[31m\u001B[0m")))))
+
+(deftest test-visible-length-counts-code-points
+  (is (= 1 (core/visible-length "😀")))
+  (is (= 2 (core/visible-length "é"))
+      "visible-length is not a grapheme or column measurement"))
 
 ;; ──────────────────────── Unicode Width Tests ──────────────────────
 
@@ -308,6 +312,19 @@
   (testing "Very long CJK strings"
     (let [long-cjk (apply str (repeat 1000 "中"))]
       (is (= 2000 (core/visible-width long-cjk))))))
+
+(deftest test-visible-width-follows-adr-0001
+  (testing "REVIEW C1 probes use Unicode 17 properties"
+    (is (= [2 2 2 2 2]
+           (mapv #(core/visible-width (String. (Character/toChars %)))
+                 [0x3000 0x3001 0x3131 0x3220 0x338F])))
+    (is (= [1 1]
+           (mapv #(core/visible-width (String. (Character/toChars %)))
+                 [0x1F170 0x1F321])))
+    (is (= [0 0 0]
+           (mapv #(core/visible-width (String. (Character/toChars %)))
+                 [0x00AD 0x2060 0xFEFF])))
+    (is (= 1 (core/visible-width "🇦")))))
 
 (deftest test-visible-width-vs-length
   (testing "visible-width gives different results than visible-length for CJK"

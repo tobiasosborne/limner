@@ -1,6 +1,12 @@
 (ns limner.core
-  "Terminal and ANSI escape sequence utilities"
-  (:require [limner.ansi :as ansi]))
+  "Compatibility utilities for ANSI styling, width, and terminal controls.
+
+  Styled composition and Unicode columns delegate to `limner.text`, whose
+  semantics are fixed by ADRs 0001 through 0003. The constructors here retain
+  the legacy string-returning API; new layout code should keep styled values
+  as data until its output boundary."
+  (:require [limner.ansi :as ansi]
+            [limner.text :as text]))
 
 ;; ────────────────────── ANSI Escape Codes ──────────────────────
 
@@ -105,31 +111,31 @@
 
 ;; ANSI code generation
 
-(defn- color-spec->ansi
-  "Convert color specification to ANSI escape sequence"
+(defn- color-spec->style
+  "Convert the compatibility color vocabulary to an ADR 0003 style map."
   [color-spec]
   (cond
-    ;; Keyword lookup in basic colors
-    (keyword? color-spec)
-    (get basic-colors color-spec)
+    (= :reset color-spec) {}
+    (#{:bold :dim :italic} color-spec) {color-spec true}
+    (= :underline color-spec) {:underline :single}
+    (and (keyword? color-spec) (contains? basic-colors color-spec))
+    (let [value (name color-spec)]
+      (if (.startsWith ^String value "bg-")
+        {:bg (keyword (subs value 3))}
+        {:fg color-spec}))
 
-    ;; RGB truecolor: ESC[38;2;R;G;Bm
     (and (map? color-spec) (= :rgb (:type color-spec)))
-    (str "\u001B[38;2;" (:r color-spec) ";" (:g color-spec) ";" (:b color-spec) "m")
+    {:fg {:rgb [(:r color-spec) (:g color-spec) (:b color-spec)]}}
 
-    ;; RGB background: ESC[48;2;R;G;Bm
     (and (map? color-spec) (= :bg-rgb (:type color-spec)))
-    (str "\u001B[48;2;" (:r color-spec) ";" (:g color-spec) ";" (:b color-spec) "m")
+    {:bg {:rgb [(:r color-spec) (:g color-spec) (:b color-spec)]}}
 
-    ;; 256-color: ESC[38;5;Nm
     (and (map? color-spec) (= :256 (:type color-spec)))
-    (str "\u001B[38;5;" (:code color-spec) "m")
+    {:fg {:index (:code color-spec)}}
 
-    ;; 256-color background: ESC[48;5;Nm
     (and (map? color-spec) (= :bg-256 (:type color-spec)))
-    (str "\u001B[48;5;" (:code color-spec) "m")
+    {:bg {:index (:code color-spec)}}
 
-    ;; Unknown/invalid
     :else
     nil))
 
@@ -151,21 +157,21 @@
       (color (rgb 255 128 0) \"text\")       ; orange
       (color (bg-rgb 0 0 128) \"text\")      ; dark blue background
 
-   Multiple colors can be combined:
-      (color :bold (color :red \"text\"))
+   Nested calls compose through `limner.text`: an inner colour does not clear
+   an outer attribute after the inner text.
 
-   Returns string uncolored if color specification is invalid (with warning)
-   Returns empty string if input string is nil"
+   Invalid specifications retain the legacy warning-and-unchanged behavior.
+   Nil input throws `ex-info`."
   [color-spec s]
   (when-not s
     (throw (ex-info "Cannot color nil string" {:color-spec color-spec :string s})))
-  (if-let [ansi-code (color-spec->ansi color-spec)]
-    (str ansi-code s "\u001B[0m")
+  (if-let [style-map (color-spec->style color-spec)]
+    (text/to-ansi (text/style style-map s))
     (do
       (when (not= color-spec :reset)
         (binding [*out* *err*]
           (println "Warning: Invalid color specification:" color-spec)))
-      s))) ; Return string uncolored if invalid
+      s)))
 
 ;; Helper functions
 
@@ -194,188 +200,25 @@
 
 ;; ────────────────────── Unicode Width Calculation ──────────────────────
 
-;; BMP code points with Emoji_Presentation=Yes (emoji by default, no VS16
-;; needed). Terminals render these at width 2; symbols such as ✓ ⚠ ❤ are
-;; text-presentation by default and stay at width 1.
-(def ^:private bmp-emoji-presentation
-  (set (mapcat (fn [[lo hi]] (range lo (inc hi)))
-               [[0x231A 0x231B] [0x23E9 0x23EC] [0x23F0 0x23F0] [0x23F3 0x23F3]
-                [0x25FD 0x25FE] [0x2614 0x2615] [0x2648 0x2653] [0x267F 0x267F]
-                [0x2693 0x2693] [0x26A1 0x26A1] [0x26AA 0x26AB] [0x26BD 0x26BE]
-                [0x26C4 0x26C5] [0x26CE 0x26CE] [0x26D4 0x26D4] [0x26EA 0x26EA]
-                [0x26F2 0x26F3] [0x26F5 0x26F5] [0x26FA 0x26FA] [0x26FD 0x26FD]
-                [0x2705 0x2705] [0x270A 0x270B] [0x2728 0x2728] [0x274C 0x274C]
-                [0x274E 0x274E] [0x2753 0x2755] [0x2757 0x2757] [0x2795 0x2797]
-                [0x27B0 0x27B0] [0x27BF 0x27BF] [0x2B1B 0x2B1C] [0x2B50 0x2B50]
-                [0x2B55 0x2B55]])))
-
-(defn- char-width
-  "Calculate display width of a single code point
-
-   Returns:
-   - 0 for control characters, zero-width characters, combining marks
-   - 1 for most characters (ASCII, Latin, etc.)
-   - 2 for wide characters (CJK, fullwidth, emoji presentation)
-
-   Based on Unicode Standard Annex #11 (East Asian Width)
-   and wcwidth implementation"
-  [cp]
-  (let [cp (int cp)
-        type (Character/getType cp)]
-    (cond
-      ;; Control characters (C0, C1)
-      (or (< cp 0x20) (and (>= cp 0x7F) (< cp 0xA0)))
-      0
-
-      ;; Zero-width characters
-      ;; Zero Width Space, Zero Width Non-Joiner, Zero Width Joiner
-      (or (= cp 0x200B) (= cp 0x200C) (= cp 0x200D))
-      0
-
-      ;; Combining characters (marks)
-      ;; These overlay previous characters and don't add width
-      (or (= type Character/NON_SPACING_MARK)
-          (= type Character/ENCLOSING_MARK)
-          (= type Character/COMBINING_SPACING_MARK))
-      0
-
-      ;; Hangul Jamo medial vowels and final consonants (combine with the
-      ;; leading consonant into a single syllable)
-      (and (>= cp 0x1160) (<= cp 0x11FF))
-      0
-
-      ;; Variation Selectors (VS1-VS16, VS17-VS256)
-      (or (and (>= cp 0xFE00) (<= cp 0xFE0F))
-          (and (>= cp 0xE0100) (<= cp 0xE01EF)))
-      0
-
-      ;; Hangul Jamo leading consonants
-      (and (>= cp 0x1100) (<= cp 0x115F))
-      2
-
-      ;; Wide characters (East Asian Width = W or F)
-      ;; CJK Unified Ideographs
-      (or (and (>= cp 0x4E00) (<= cp 0x9FFF))
-          (and (>= cp 0x3400) (<= cp 0x4DBF))
-          (and (>= cp 0x20000) (<= cp 0x2A6DF))
-          (and (>= cp 0x2A700) (<= cp 0x2B73F))
-          (and (>= cp 0x2B740) (<= cp 0x2B81F))
-          (and (>= cp 0x2B820) (<= cp 0x2CEAF))
-          (and (>= cp 0x2CEB0) (<= cp 0x2EBEF))
-          (and (>= cp 0x30000) (<= cp 0x3134F)))
-      2
-
-      ;; Hangul Syllables
-      (and (>= cp 0xAC00) (<= cp 0xD7A3))
-      2
-
-      ;; CJK Compatibility Ideographs
-      (or (and (>= cp 0xF900) (<= cp 0xFAFF))
-          (and (>= cp 0x2F800) (<= cp 0x2FA1F)))
-      2
-
-      ;; Fullwidth forms
-      (and (>= cp 0xFF01) (<= cp 0xFF60))
-      2
-
-      ;; Fullwidth forms (continued)
-      (and (>= cp 0xFFE0) (<= cp 0xFFE6))
-      2
-
-      ;; Hiragana and Katakana
-      (or (and (>= cp 0x3040) (<= cp 0x309F))
-          (and (>= cp 0x30A0) (<= cp 0x30FF)))
-      2
-
-      ;; Emoji presentation characters in the BMP (⌚ ⚡ ✅ ⭐ ...)
-      (contains? bmp-emoji-presentation cp)
-      2
-
-      ;; Emoji presentation characters (most common ranges)
-      ;; Most true emoji are in the 0x1F000+ range. Multi-code-point
-      ;; sequences (ZWJ, flags, modifiers) are handled per grapheme
-      ;; cluster in cluster-width.
-      (or (and (>= cp 0x1F300) (<= cp 0x1F9FF))   ; Misc Symbols and Pictographs
-          (and (>= cp 0x1FA70) (<= cp 0x1FAFF))   ; Symbols and Pictographs Ext-A
-          (and (>= cp 0x1F000) (<= cp 0x1F02F))   ; Mahjong Tiles
-          (and (>= cp 0x1F0A0) (<= cp 0x1F0FF))   ; Playing Cards
-          (and (>= cp 0x1F100) (<= cp 0x1F2FF)))  ; Enclosed Alphanumeric Supplement
-      2
-
-      ;; Default: narrow character (width 1)
-      :else
-      1)))
-
-(defn- grapheme-clusters
-  "Split string into grapheme clusters (user-perceived characters)
-
-   Uses the JDK's BreakIterator, which follows UAX #29 extended grapheme
-   clusters (including emoji ZWJ sequences) on JDK 20+ and in babashka."
-  [^String s]
-  (let [bi (doto (java.text.BreakIterator/getCharacterInstance)
-             (.setText s))]
-    (loop [start (.first bi)
-           acc (transient [])]
-      (let [end (.next bi)]
-        (if (= end java.text.BreakIterator/DONE)
-          (persistent! acc)
-          (recur end (conj! acc (subs s start end))))))))
-
-(defn- cluster-width
-  "Calculate display width of a single grapheme cluster
-
-   A cluster renders as one glyph, so its width is that of its base
-   (first) code point; joined code points (ZWJ, skin-tone modifiers,
-   combining marks, second regional indicator of a flag) add nothing.
-   VS16 (U+FE0F) requests emoji presentation, which is width 2 (❤️, 1️⃣)."
-  [^String cluster]
-  (let [base (char-width (.codePointAt cluster 0))]
-    (cond
-      (>= (.indexOf cluster "\uFE0F") 0) 2
-      (pos? base) base
-      ;; Zero-width base (e.g. a prepended format character or CR LF):
-      ;; fall back to the widest code point in the cluster
-      :else (reduce max 0 (map char-width (.toArray (.codePoints cluster)))))))
-
 (defn visible-width
-  "Calculate accurate display width of string accounting for Unicode
+  "Return Unicode 17 display columns for an ANSI string or styled-text value.
 
-   Handles:
-   - ANSI escape codes (stripped, width 0)
-   - Grapheme clusters: emoji ZWJ sequences (👨‍👩‍👧‍👦), flags (🇩🇪),
-     skin-tone modifiers (👍🏽) and keycaps (1️⃣) count as one glyph
-   - Wide characters (CJK, fullwidth) - width 2
-   - Combining characters - width 0
-   - Zero-width characters (ZWJ, ZWNJ, etc.) - width 0
-   - Control characters - width 0
-   - Emoji presentation - width 2
-   - Regular characters - width 1
-
-   This is the recommended function for calculating string width
-   for terminal layout and alignment.
-
-   Note: actual rendering of emoji sequences still depends on the
-   terminal's font and Unicode version."
+   This compatibility name delegates to `limner.text/width`; new code should
+   call that function directly when it also needs slicing or padding."
   [s]
-  (when-not s
-    (throw (ex-info "Cannot calculate width of nil string" {:string s})))
-  (let [^String clean (ansi/strip s)]
-    (if (every? #(<= 0x20 (int %) 0x7E) clean)
-      ;; Fast path: printable ASCII is always one column per char
-      (.length clean)
-      (reduce + 0 (map cluster-width (grapheme-clusters clean))))))
+  (text/width s))
 
 (defn visible-length
   "Calculate visible length of string, stripping ANSI codes
 
    DEPRECATED: Use visible-width instead for accurate Unicode handling.
 
-   This function only strips ANSI codes and counts characters,
-   without accounting for wide characters or combining marks.
-   It's kept for backward compatibility but will give incorrect
-   results for CJK text, emoji, and other Unicode edge cases."
+   This function strips ECMA-48 controls and counts Unicode code points. It is
+   kept for callers needing a character count, but it does not measure columns
+   or grapheme clusters."
   [s]
-  (count (ansi/strip s)))
+  (let [^String clean (ansi/strip s)]
+    (.codePointCount clean 0 (.length clean))))
 
 ;; ────────────────────── Terminal Control ──────────────────────
 (defn hide-cursor
