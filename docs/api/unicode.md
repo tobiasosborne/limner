@@ -53,5 +53,7 @@ text layer is switched over.
 ```
 
 `cluster-width` assumes its non-empty string is one grapheme cluster; it does
-not perform segmentation. Whole-string width and migration of
-`limner.core/visible-width` remain later text-layer work.
+not perform segmentation. A cluster made only from zero-width code points has
+width 1 only when it begins with a non-default-ignorable `Mn` or `Me` mark;
+invisible and structural singleton clusters have width 0. Whole-string width
+and migration of `limner.core/visible-width` remain later text-layer work.

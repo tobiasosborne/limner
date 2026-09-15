@@ -63,8 +63,10 @@ or attempt to validate that assertion; UAX #29 segmentation is ADR 0002 and
 Phase 1.4. It applies these ordered rules:
 
 1. Start with the first non-zero `code-point-width` in the cluster. If every
-   code point is zero-width, return 1, matching the practical visible fallback
-   used for an isolated or leading combining mark.
+   code point is zero-width, return 1 only when the first code point is an
+   `Mn` or `Me` combining mark that is not `Default_Ignorable_Code_Point`.
+   Return 0 for invisible and structural clusters, including controls, format
+   characters, default-ignorables, and Hangul V/T continuations.
 2. VS15 (U+FE0E) immediately after an emoji base requests text presentation;
    use that base's EAW-resolved width and do not apply emoji widening.
 3. VS16 (U+FE0F) immediately after an `Extended_Pictographic` or
@@ -82,6 +84,24 @@ Phase 1.4. It applies these ordered rules:
 These rules deliberately do not make every `Extended_Pictographic` wide.
 U+1F170 and U+1F321 therefore remain width 1 without VS16, as their EAW values
 A and N require.
+
+### Amendment: all-zero clusters (2026-09-15)
+
+The original rule returned 1 whenever every scalar width was zero. That made
+invisible singleton clusters such as U+200B ZERO WIDTH SPACE, U+FEFF, U+00AD,
+U+200D ZWJ and U+FE0F VS16 advance by one cell; it also made structural C0
+characters such as tab and newline advance. This contradicted the earlier
+scalar rules and would have made whole-string width depend on whether the same
+property was measured before or after segmentation.
+
+The fallback is now limited to a leading `Mn` or `Me` that is not default
+ignorable. Limner assigns an isolated U+0301 width 1 because terminals commonly
+show a leading mark with a dotted-circle or spacing fallback, but returns 0 for
+the invisible and structural cases above. Python `wcwidth` at the surveyed
+commit accumulates only positive scalar widths in `wcswidth`, so both an
+isolated mark and a zero-width format character total 0. Limner follows that
+precedent for invisible content while deliberately retaining its documented
+isolated-mark convention.
 
 Terminals and C libraries lag Unicode releases. In particular, U+2630..U+2637
 and U+268A..U+268F changed to EAW W in Unicode 16 and are W in the pinned 17.0

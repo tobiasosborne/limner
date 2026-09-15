@@ -29,6 +29,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Archived the historical 2025 tutorial, architecture, and planning documents;
   corrected the active API documentation against the implementation.
 
+### Fixed
+
+- Kept invisible and structural all-zero grapheme clusters at zero terminal
+  width while retaining the explicit isolated-combining-mark fallback.
+
 ### Deprecated
 
 - Deprecated the top-level `limner` compatibility namespace; require the

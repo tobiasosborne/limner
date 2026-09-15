@@ -97,6 +97,12 @@
   (or (unicode/extended-pictographic? code-point)
       (unicode/emoji-presentation? code-point)))
 
+(defn- isolated-mark-width [first-code-point]
+  (if (and (#{:Mn :Me} (unicode/general-category first-code-point))
+           (not (unicode/default-ignorable? first-code-point)))
+    1
+    0))
+
 (defn cluster-width
   "Return the ADR 0001 width of one caller-asserted grapheme cluster.
 
@@ -110,7 +116,8 @@
   (let [ambiguous (ambiguous-width options)
         points (code-points cluster)
         widths (mapv #(code-point-width* % ambiguous) points)
-        base-width (or (some #(when (pos? %) %) widths) 1)
+        base-width (or (some #(when (pos? %) %) widths)
+                       (isolated-mark-width (first points)))
         text-base (presentation-base points 0xFE0E)
         emoji-base (presentation-base points 0xFE0F)]
     (cond

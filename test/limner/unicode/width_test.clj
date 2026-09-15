@@ -107,6 +107,23 @@
     (width/code-point-width cp {})
     (catch clojure.lang.ExceptionInfo _ :surrogate)))
 
+(defn- singleton-cluster-result [cp]
+  (try
+    (width/cluster-width (String. (Character/toChars cp)) {})
+    (catch clojure.lang.ExceptionInfo _ :surrogate)))
+
+(defn- raw-singleton-cluster-width [cp]
+  (let [scalar-width (raw-code-point-width cp 1)
+        category (aget ^bytes @raw-categories cp)]
+    (if (= :surrogate scalar-width)
+      :surrogate
+      (if (zero? scalar-width)
+        (if (and (or (= category 1) (= category 2))
+                 (not= 1 (aget ^bytes @raw-default-ignorable cp)))
+          1
+          0)
+        scalar-width))))
+
 (deftest code-point-width-matches-raw-ucd-restatement
   (let [{:keys [count samples]}
         (reduce (fn [{:keys [count samples]} cp]
@@ -124,6 +141,25 @@
                 exhaustive-code-points)]
     (is (zero? count)
         (str count " Unicode width mismatches; first: " (pr-str samples)))))
+
+(deftest singleton-cluster-width-matches-amended-raw-ucd-restatement
+  (let [{:keys [count samples]}
+        (reduce (fn [{:keys [count samples]} cp]
+                  (let [expected (raw-singleton-cluster-width cp)
+                        actual (singleton-cluster-result cp)]
+                    (if (= expected actual)
+                      {:count count :samples samples}
+                      {:count (inc count)
+                       :samples (cond-> samples
+                                  (< (clojure.core/count samples) 20)
+                                  (conj {:code-point cp
+                                         :expected expected
+                                         :actual actual}))})))
+                {:count 0 :samples []}
+                exhaustive-code-points)]
+    (is (zero? count)
+        (str count " singleton cluster-width mismatches; first: "
+             (pr-str samples)))))
 
 (deftest code-point-examples-and-policy-edges
   (testing "review probes and pinned-version differences"
@@ -174,3 +210,11 @@
   (is (= 1 (width/cluster-width "🇦" {})))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"non-empty"
                         (width/cluster-width "" {}))))
+
+(deftest all-zero-clusters-distinguish-marks-from-invisible-content
+  (testing "invisible and structural singleton clusters do not advance"
+    (is (= [0 0 0 0 0 0 0]
+           (mapv #(width/cluster-width % {})
+                 ["\u200B" "\n" "\t" "\uFEFF" "\u00AD" "\u200D" "\uFE0F"]))))
+  (testing "an isolated nonspacing mark retains the visible fallback"
+    (is (= 1 (width/cluster-width "\u0301" {})))))
