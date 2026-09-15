@@ -22,7 +22,9 @@ has since attracted real outside attention (GitHub issues #1 and #2 from an
 experienced Clojure developer). The job now is to turn it into a codebase
 that deserves that attention. The full audit is
 `reviews/2026-09-15/REVIEW.md`; the working plan is
-`reviews/2026-09-15/PLAN.md` (to be converted into beads issues).
+`reviews/2026-09-15/PLAN.md` (its phases are now beads issues). **Start each
+session with `HANDOFF.md`** (current state, owner preferences, next steps),
+then `bd ready`.
 Treat every claim in `README.md` and active `docs/` as unverified until you
 have checked it against the code. Documents under `docs/archive/2025/` are
 historical and explicitly do not describe the current system.
