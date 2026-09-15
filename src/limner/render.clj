@@ -252,9 +252,8 @@
 
 ;; ────────────────────── Terminal Operations ──────────────────────
 
-(defn get-terminal-size
-  "Get current terminal dimensions with error handling and validation.
-   Tries multiple methods to get accurate terminal size."
+(defn- terminal-size-from-system
+  "Read terminal dimensions with stty or tput for the production size source."
   []
   (letfn [(try-stty []
             ;; Try stty size which works better with actual terminals
@@ -266,7 +265,7 @@
                     {:width (Integer/parseInt cols)
                      :height (Integer/parseInt rows)})))
               (catch Exception _ nil)))
-          
+
           (try-tput []
             ;; Fallback to tput
             (try
@@ -275,19 +274,33 @@
                     cols (str/trim (:out cols-result))
                     lines (str/trim (:out lines-result))]
                 (when (and (seq cols) (seq lines))
-                  {:width (Integer/parseInt cols)
-                   :height (Integer/parseInt lines)}))
-              (catch Exception _ nil)))
-          
-          (validate-size [{:keys [width height] :as size}]
-            (when size
-              (let [w (cond (< width 20) 80 (> width 500) 500 :else width)
-                    h (cond (< height 10) 24 (> height 200) 200 :else height)]
-                {:width w :height h})))]
-    
-    (or (validate-size (try-stty))
-        (validate-size (try-tput))
-        {:width 80 :height 24})))
+                    {:width (Integer/parseInt cols)
+                     :height (Integer/parseInt lines)}))
+              (catch Exception _ nil)))]
+    (or (try-stty) (try-tput))))
+
+(defn- validate-terminal-size
+  "Apply the renderer's current lower fallbacks and upper bounds to a size."
+  [{:keys [width height] :as size}]
+  (when size
+    (let [w (cond (< width 20) 80 (> width 500) 500 :else width)
+          h (cond (< height 10) 24 (> height 200) 200 :else height)]
+      {:width w :height h})))
+
+(defn get-terminal-size
+  "Get validated terminal dimensions as {:width w :height h}.
+
+   With no argument, the production source tries stty and then tput. The
+   optional zero-argument size-source is the effects seam for tests; it returns
+   a size map or nil. Source errors and nil fall back to 80 by 24."
+  ([]
+   (get-terminal-size terminal-size-from-system))
+  ([size-source]
+   (try
+     (or (validate-terminal-size (size-source))
+         {:width 80 :height 24})
+     (catch Exception _
+       {:width 80 :height 24}))))
 
 (defn clear-screen
   "Clear entire screen and move cursor to home"
@@ -318,17 +331,35 @@
 
 ;; ────────────────────── Render State ──────────────────────
 
+(defn- system-clock-ns
+  "Return monotonic nanoseconds for the production render clock."
+  []
+  (System/nanoTime))
+
+(defn- current-time-ns
+  "Read the render state's injected clock, retaining the production default for
+   state maps created before clock injection was available."
+  [state]
+  ((or (:clock state) system-clock-ns)))
+
 (defn render-state
-  "Create initial render state with double buffers"
-  [width height]
-  {:front-buffer (create-buffer width height)
-   :back-buffer (create-buffer width height)
-   :width width
-   :height height
-   :frame-count 0
-   :last-render-time (System/nanoTime)
-   :last-resize-check (System/currentTimeMillis)
-   :target-fps 60})
+  "Create initial render state with double buffers.
+
+   The optional :clock is a zero-argument monotonic nanosecond function. It
+   defaults to System/nanoTime and is retained in the state so frame and resize
+   decisions can use a deterministic clock in tests."
+  [width height & {:keys [clock]
+                   :or {clock system-clock-ns}}]
+  (let [now (clock)]
+    {:front-buffer (create-buffer width height)
+     :back-buffer (create-buffer width height)
+     :width width
+     :height height
+     :frame-count 0
+     :clock clock
+     :last-render-time now
+     :last-resize-check now
+     :target-fps 60}))
 
 (defn swap-buffers
   "Swap front and back buffers"
@@ -358,25 +389,25 @@
   (/ 1000.0 fps))
 
 (defn should-render?
-  "Check if enough time has passed to render next frame"
+  "Check against the render state's clock whether the next frame is due."
   [state]
-  (let [now (System/nanoTime)
+  (let [now (current-time-ns state)
         elapsed-ms (/ (- now (:last-render-time state)) 1000000.0)
         target-ms (frame-time-ms (:target-fps state))]
     (>= elapsed-ms target-ms)))
 
 (defn update-render-time
-  "Update last render time to now"
+  "Update the last render timestamp from the render state's clock."
   [state]
-  (assoc state :last-render-time (System/nanoTime)))
+  (assoc state :last-render-time (current-time-ns state)))
 
 (defn- should-check-resize?
   "Check if enough time has passed to check for terminal resize
    Checks every 500ms to avoid excessive polling"
   [state]
-  (let [now (System/currentTimeMillis)
+  (let [now (current-time-ns state)
         elapsed (- now (:last-resize-check state 0))]
-    (>= elapsed 500)))
+    (>= elapsed (* 500 1000000))))
 
 (defn- resize-buffers
   "Resize buffers to new dimensions, preserving what we can
@@ -398,12 +429,12 @@
             :height new-height
             :front-buffer (create-buffer new-width new-height)
             :back-buffer (create-buffer new-width new-height)
-            :last-resize-check (System/currentTimeMillis)))))
+            :last-resize-check (current-time-ns state)))))
     (catch Exception e
       (binding [*out* *err*]
         (println (str "Error resizing buffers: " (.getMessage e))))
       ;; Return original state on error
-      (assoc state :last-resize-check (System/currentTimeMillis)))))
+      (assoc state :last-resize-check (current-time-ns state)))))
 
 (defn- check-and-handle-resize
   "Check for terminal resize and handle it if detected
@@ -419,19 +450,19 @@
           ;; Resize detected
           [(resize-buffers state new-width new-height) true]
           ;; No resize, just update check time
-          [(assoc state :last-resize-check (System/currentTimeMillis)) false]))
+          [(assoc state :last-resize-check (current-time-ns state)) false]))
       (catch Exception e
         (binding [*out* *err*]
           (println (str "Error checking terminal size: " (.getMessage e))))
         ;; Return original state on error
-        [(assoc state :last-resize-check (System/currentTimeMillis)) false]))
+        [(assoc state :last-resize-check (current-time-ns state)) false]))
     ;; Not time to check yet
     [state false]))
 
 (defn get-fps
   "Calculate actual FPS based on last render time"
   [state]
-  (let [now (System/nanoTime)
+  (let [now (current-time-ns state)
         elapsed-ms (/ (- now (:last-render-time state)) 1000000.0)]
     (if (pos? elapsed-ms)
       (int (/ 1000.0 elapsed-ms))

@@ -2,6 +2,13 @@
   (:require [clojure.test :refer [deftest is testing]]
             [limner.events :as events]))
 
+(defn- await-signal
+  "Dereference a synchronization signal; five seconds is only a hang guard."
+  [signal]
+  (let [result (deref signal 5000 ::timeout)]
+    (is (not= ::timeout result) "Timed out waiting for an async test signal")
+    result))
+
 ;; ────────────────────── Key Parsing Tests ──────────────────────
 
 (deftest test-parse-regular-chars
@@ -457,97 +464,109 @@
   (testing "Async event processor handles events"
     (let [state-atom (atom {:count 0})
           queue (events/create-event-queue)
-          processor (events/create-async-event-processor
-                     :event-queue queue
-                     :state-atom state-atom
-                     :process-fn (fn [event state]
-                                   (update state :count inc)))]
-
-      ;; Check processor is running
-      (is ((:running? processor)))
-
-      ;; Put some events
-      (events/put-event! queue {:type :test})
-      (events/put-event! queue {:type :test})
-      (Thread/sleep 100) ; Give time to process
-
-      ;; Check events were processed
-      (is (>= (:count @state-atom) 2))
-
-      ;; Stop processor
-      ((:stop! processor))
-      (Thread/sleep 50)
-      (is (not ((:running? processor)))))))
+          processed (promise)
+          errors (java.io.StringWriter.)
+          processor (binding [*err* errors]
+                      (events/create-async-event-processor
+                       :event-queue queue
+                       :state-atom state-atom
+                       :process-fn (fn [event state]
+                                     (if (= :barrier (:type event))
+                                       (do (deliver processed :processed) state)
+                                       (update state :count inc)))))]
+      (binding [*err* errors]
+        (is ((:running? processor)))
+        (events/put-event! queue {:type :test})
+        (events/put-event! queue {:type :test})
+        (events/put-event! queue {:type :barrier})
+        (is (= :processed (await-signal processed)))
+        ((:stop! processor)))
+      (is (= {:count 2} @state-atom))
+      (is (not ((:running? processor))))
+      (is (= "" (str errors))))))
 
 (deftest test-async-processor-timeout
   (testing "Event handler timeout mechanism"
     (let [state-atom (atom {:count 0})
           queue (events/create-event-queue)
-          timeout-called (atom false)
-          processor (events/create-async-event-processor
-                     :event-queue queue
-                     :state-atom state-atom
-                     :process-fn (fn [event state]
-                                   ;; Simulate slow handler
-                                   (Thread/sleep 200)
-                                   (update state :count inc))
-                     :handler-timeout-ms 50 ; Very short timeout
-                     :on-timeout (fn [event state]
-                                   (reset! timeout-called true)))]
-
-      ;; Put event that will timeout
-      (events/put-event! queue {:type :slow})
-      (Thread/sleep 150) ; Wait for timeout to occur
-
-      ;; Check timeout was detected
-      (is @timeout-called)
-      (let [stats ((:get-stats processor))]
-        (is (> (:timeouts stats) 0)))
-
-      ;; Cleanup
-      ((:stop! processor)))))
+          handler-started (promise)
+          release-handler (promise)
+          handler-finished (promise)
+          timeout-called (promise)
+          errors (java.io.StringWriter.)
+          processor (binding [*err* errors]
+                      (events/create-async-event-processor
+                       :event-queue queue
+                       :state-atom state-atom
+                       :process-fn (fn [_ state]
+                                     (deliver handler-started :started)
+                                     @release-handler
+                                     (deliver handler-finished :finished)
+                                     (update state :count inc))
+                       :handler-timeout-ms 50
+                       :on-timeout (fn [_ _]
+                                     (deliver timeout-called :timed-out))))]
+      (binding [*err* errors]
+        (try
+          (events/put-event! queue {:type :slow})
+          (is (= :started (await-signal handler-started)))
+          (is (= :timed-out (await-signal timeout-called)))
+          ;; The handler is released only after the timeout callback is observed.
+          (deliver release-handler true)
+          (is (= :finished (await-signal handler-finished)))
+          ((:stop! processor))
+          (finally
+            (deliver release-handler true)
+            (when ((:running? processor))
+              ((:stop! processor))))))
+      (is (= 1 (:timeouts ((:get-stats processor)))))
+      (is (= "Warning: Event handler timeout after 50ms: {:type :slow}\n"
+             (str errors))))))
 
 (deftest test-async-processor-error-handling
   (testing "Event handler error handling"
     (let [state-atom (atom {:count 0})
           queue (events/create-event-queue)
-          error-called (atom false)
-          processor (events/create-async-event-processor
-                     :event-queue queue
-                     :state-atom state-atom
-                     :process-fn (fn [event state]
-                                   (if (= (:type event) :error)
-                                     (throw (Exception. "Test error"))
-                                     (update state :count inc)))
-                     :on-error (fn [error event state]
-                                 (reset! error-called true)))]
-
-      ;; Put normal event
-      (events/put-event! queue {:type :normal})
-      (Thread/sleep 50)
-
-      ;; Put error event
-      (events/put-event! queue {:type :error})
-      (Thread/sleep 50)
-
-      ;; Check error was handled
-      (is @error-called)
-      (let [stats ((:get-stats processor))]
-        (is (> (:errors stats) 0))
-        (is (>= (:events-processed stats) 1))) ; At least one good event processed
-
-      ;; Cleanup
-      ((:stop! processor)))))
+          handler-error (Exception. "Test error")
+          error-called (promise)
+          errors (java.io.StringWriter.)
+          processor (binding [*err* errors]
+                      (events/create-async-event-processor
+                       :event-queue queue
+                       :state-atom state-atom
+                       :process-fn (fn [event state]
+                                     (if (= (:type event) :error)
+                                       (throw handler-error)
+                                       (update state :count inc)))
+                       :on-error (fn [error _ _]
+                                   (deliver error-called error))))]
+      (binding [*err* errors]
+        (events/put-event! queue {:type :normal})
+        (events/put-event! queue {:type :error})
+        (is (identical? handler-error (await-signal error-called)))
+        ((:stop! processor)))
+      (is (= {:events-processed 1 :errors 1 :timeouts 0
+              :batches-processed 0}
+             ((:get-stats processor))))
+      (is (= (str "Error in event handler: "
+                  (with-out-str (print handler-error))
+                  "\n")
+             (str errors))))))
 
 (deftest test-create-async-event-system
   (testing "Complete async event system"
     (let [state-atom (atom {:count 0})
-          system (events/create-async-event-system
-                  :state-atom state-atom
-                  :process-fn (fn [event state]
-                                (update state :count inc))
-                  :buffer-size 50
-                  :handler-timeout-ms 1000)]
+          processed (promise)
+          errors (java.io.StringWriter.)
+          system (binding [*err* errors]
+                   (events/create-async-event-system
+                    :state-atom state-atom
+                    :process-fn (fn [event state]
+                                  (if (= :barrier (:type event))
+                                    (do (deliver processed :processed) state)
+                                    (update state :count inc)))
+                    :buffer-size 50
+                    :handler-timeout-ms 1000))]
 
       ;; Check system components
       (is (some? (:queue system)))
@@ -559,62 +578,55 @@
       ;; System should be running
       (is ((:running? system)))
 
-      ;; Put events using convenience function
-      ((:put! system) {:type :test})
-      ((:put! system) {:type :test})
-      (Thread/sleep 100)
-
-      ;; Check events processed
-      (is (>= (:count @state-atom) 2))
-
-      ;; Get statistics
-      (let [stats ((:get-stats system))]
-        (is (>= (:events-processed stats) 2))
-        (is (= 0 (:errors stats)))
-        (is (= 0 (:timeouts stats))))
-
-      ;; Stop system
-      ((:stop! system))
-      (Thread/sleep 50)
-      (is (not ((:running? system)))))))
+      (binding [*err* errors]
+        ((:put! system) {:type :test})
+        ((:put! system) {:type :test})
+        ((:put! system) {:type :barrier})
+        (is (= :processed (await-signal processed)))
+        ((:stop! system)))
+      (is (= {:count 2} @state-atom))
+      (is (= {:events-processed 3 :errors 0 :timeouts 0
+              :batches-processed 0}
+             ((:get-stats system))))
+      (is (not ((:running? system))))
+      (is (= "" (str errors))))))
 
 (deftest test-async-system-stats
   (testing "Event processing statistics"
     (let [state-atom (atom {:count 0})
-          system (events/create-async-event-system
-                  :state-atom state-atom
-                  :process-fn (fn [event state]
-                                (update state :count inc)))]
-
-      ;; Process multiple events
-      (dotimes [_ 10]
-        ((:put! system) {:type :test}))
-      (Thread/sleep 200)
-
-      ;; Check statistics
-      (let [stats ((:get-stats system))]
-        (is (>= (:events-processed stats) 10))
-        (is (number? (:errors stats)))
-        (is (number? (:timeouts stats))))
-
-      ;; Cleanup
-      ((:stop! system)))))
+          processed (promise)
+          errors (java.io.StringWriter.)
+          system (binding [*err* errors]
+                   (events/create-async-event-system
+                    :state-atom state-atom
+                    :process-fn (fn [event state]
+                                  (if (= :barrier (:type event))
+                                    (do (deliver processed :processed) state)
+                                    (update state :count inc)))))]
+      (binding [*err* errors]
+        (dotimes [_ 10]
+          ((:put! system) {:type :test}))
+        ((:put! system) {:type :barrier})
+        (is (= :processed (await-signal processed)))
+        ((:stop! system)))
+      (is (= {:count 10} @state-atom))
+      (is (= {:events-processed 11 :errors 0 :timeouts 0
+              :batches-processed 0}
+             ((:get-stats system))))
+      (is (= "" (str errors))))))
 
 (deftest test-async-system-graceful-shutdown
   (testing "Async system graceful shutdown"
     (let [state-atom (atom {:count 0})
-          system (events/create-async-event-system
-                  :state-atom state-atom
-                  :process-fn (fn [event state]
-                                (update state :count inc)))]
-
-      ;; Put many events
-      (dotimes [_ 100]
-        ((:put! system) {:type :test}))
-
-      ;; Stop immediately (should handle gracefully)
-      ((:stop! system))
-
-      ;; Should stop without errors
-      (is (not ((:running? system)))))))
-
+          errors (java.io.StringWriter.)
+          system (binding [*err* errors]
+                   (events/create-async-event-system
+                    :state-atom state-atom
+                    :process-fn (fn [_ state]
+                                  (update state :count inc))))]
+      (binding [*err* errors]
+        (dotimes [_ 100]
+          ((:put! system) {:type :test}))
+        ((:stop! system)))
+      (is (not ((:running? system))))
+      (is (= "" (str errors))))))

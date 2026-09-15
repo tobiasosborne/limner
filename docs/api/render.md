@@ -58,11 +58,20 @@ restoration.
 ## Terminal Operations
 
 ### `get-terminal-size`
-`(get-terminal-size)`
+`(get-terminal-size)` or `(get-terminal-size size-source)`
 
 Returns dimensions as `{:width w :height h}`. It tries `stty` and then `tput`,
 falling back to 80×24. Reported widths below 20 and heights below 10 are also
-replaced by those fallback dimensions.
+replaced by those fallback dimensions. The optional zero-argument source is
+intended for deterministic callers and tests; returning `nil` or throwing uses
+the fallback without invoking the production source.
+
+### `render-state`
+`(render-state width height & {:keys [clock]})`
+
+Creates the double-buffer state. `:clock` is an optional zero-argument
+monotonic nanosecond clock. It defaults to `System/nanoTime` and is retained for
+frame and resize decisions.
 
 ### `clear-screen`
 `(clear-screen)`

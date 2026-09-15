@@ -6,7 +6,8 @@
   attempted when its executable is present on PATH."
   (:require [clojure.java.io :as io]
             [clojure.java.shell :as shell]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [limner.terminal :as terminal]))
 
 (defn run-command
   "Run a command synchronously and retain its exit status and output."
@@ -16,7 +17,7 @@
 (defn command-available?
   "Return true when an executable file with this name is present on PATH."
   [command]
-  (let [path (or (System/getenv "PATH") "")]
+  (let [path (or (terminal/get-env "PATH") "")]
     (boolean
      (some (fn [directory]
              (let [candidate (io/file directory command)]

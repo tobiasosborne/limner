@@ -27,6 +27,28 @@
                (:namespaces (runner/run-tests ["-n" "limner.layout-test"]))))
         (is (= '(limner.layout-test) @called))))))
 
+(deftest rejects-uncaptured-terminal-and-error-output
+  (let [result (atom nil)
+        errors (java.io.StringWriter.)
+        output (binding [*err* errors]
+                 (with-out-str
+                   (with-redefs [runner/discover-test-namespaces
+                                 (constantly '[limner.synthetic-test])
+                                 clojure.core/require (fn [& _])
+                                 clojure.test/run-tests
+                                 (fn [& _]
+                                   (print "raw \u001B[2J output")
+                                   (binding [*out* *err*]
+                                     (println "unexpected warning"))
+                                   {:test 1 :pass 1 :fail 0 :error 0})]
+                     (reset! result (runner/run-tests [])))))]
+    (is (= {:test 1 :pass 1 :fail 2 :error 0} @result))
+    (is (= (str "raw \\u001B[2J output"
+                "\nTest output hygiene failure: uncaptured ANSI escape byte in stdout.\n"
+                "Test output hygiene failure: uncaptured stderr: \"unexpected warning\\n\"\n")
+           output))
+    (is (= "" (str errors)))))
+
 (deftest main-exits-explicitly-after-a-green-suite
   (let [exit-code (atom nil)]
     (with-redefs [runner/run-tests (constantly {:fail 0 :error 0})

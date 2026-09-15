@@ -208,15 +208,29 @@
           regions (render/find-dirty-regions dirty-cells)]
       (is (= 2 (count regions))))))
 
+(deftest test-apply-diff-output
+  (testing "Apply diff writes the exact dirty region bytes"
+    (let [old-buffer (render/create-buffer 2 1)
+          new-buffer (render/write-string-to-buffer old-buffer 0 0 "AB")
+          regions (atom nil)
+          output (with-out-str
+                   (reset! regions (render/apply-diff old-buffer new-buffer)))]
+      (is (= 1 @regions))
+      (is (= "\u001B[1;1HAB\u001B[0m" output)))))
+
 ;; ──────────────────────── Render State Tests ──────────────────────
 
 (deftest test-render-state-creation
   (testing "Create initial render state"
-    (let [state (render/render-state 80 24)]
+    (let [clock (constantly 1000000000)
+          state (render/render-state 80 24 :clock clock)]
       (is (= 80 (:width state)))
       (is (= 24 (:height state)))
       (is (= 0 (:frame-count state)))
       (is (= 60 (:target-fps state)))
+      (is (= 1000000000 (:last-render-time state)))
+      (is (= 1000000000 (:last-resize-check state)))
+      (is (identical? clock (:clock state)))
       (is (some? (:front-buffer state)))
       (is (some? (:back-buffer state))))))
 
@@ -248,17 +262,16 @@
     (is (< (Math/abs (- (render/frame-time-ms 30) 33.333)) 0.1))))
 
 (deftest test-should-render
-  (testing "Should render when enough time has passed"
-    (let [state (render/render-state 80 24)
-          ;; Set last render time to 100ms ago
-          old-time (- (System/nanoTime) (* 100 1000000))
-          state2 (assoc state :last-render-time old-time)]
-      (is (render/should-render? state2))))
-
-  (testing "Should not render immediately after last render"
-    (let [state (render/render-state 80 24)
-          state2 (render/update-render-time state)]
-      (is (not (render/should-render? state2))))))
+  (testing "Render eligibility follows the injected monotonic clock"
+    (let [now (atom 1000000000)
+          state (render/render-state 80 24 :clock #(deref now))]
+      (reset! now 1016666666)
+      (is (false? (render/should-render? state)))
+      (reset! now 1016666667)
+      (is (true? (render/should-render? state)))
+      (let [updated (render/update-render-time state)]
+        (is (= 1016666667 (:last-render-time updated)))
+        (is (false? (render/should-render? updated)))))))
 
 ;; ──────────────────────── Buffer Statistics Tests ──────────────────────
 
@@ -295,15 +308,16 @@
 ;; ──────────────────────── Integration Tests ──────────────────────
 
 (deftest test-render-frame-integration
-  (testing "Render frame updates state correctly"
-    (let [state (render/render-state 80 24)
-          ;; Force time to pass
-          old-time (- (System/nanoTime) (* 100 1000000))
-          state2 (assoc state :last-render-time old-time)
-          lines ["Test line 1" "Test line 2"]
-          state3 (render/render-frame state2 lines)]
-      (is (= 1 (:frame-count state3)))
-      (is (not= (:last-render-time state2) (:last-render-time state3))))))
+  (testing "Render frame writes exact bytes and records the injected time"
+    (let [now (atom 1000000000)
+          state (render/render-state 2 1 :clock #(deref now))
+          rendered (atom nil)]
+      (reset! now 1100000000)
+      (let [output (with-out-str
+                     (reset! rendered (render/render-frame state ["AB"])))]
+        (is (= "\u001B[1;1HAB\u001B[0m" output))
+        (is (= 1 (:frame-count @rendered)))
+        (is (= 1100000000 (:last-render-time @rendered)))))))
 
 (deftest test-move-cursor
   (testing "Generate cursor movement ANSI code"
@@ -336,29 +350,28 @@
       (is (thrown? Exception (render/write-lines-to-buffer buf 0 0 [nil "valid"]))))))
 
 (deftest test-terminal-size-defaults
-  (testing "get-terminal-size returns reasonable defaults on error"
-    (let [size (render/get-terminal-size)]
-      ;; Should not crash, should return reasonable values
-      (is (number? (:width size)))
-      (is (number? (:height size)))
-      (is (>= (:width size) 20))
-      (is (<= (:width size) 500))
-      (is (>= (:height size) 10))
-      (is (<= (:height size) 200)))))
+  (testing "get-terminal-size uses defaults when the injected source fails"
+    (is (= {:width 80 :height 24}
+           (render/get-terminal-size (constantly nil))))
+    (is (= {:width 80 :height 24}
+           (render/get-terminal-size
+            (fn [] (throw (ex-info "unavailable" {}))))))))
 
 (deftest test-render-frame-error-recovery
   (testing "render-frame returns original state on error"
-    (let [state (render/render-state 80 24)
-          old-time (- (System/nanoTime) (* 100 1000000))
-          state2 (assoc state :last-render-time old-time)
+    (let [now (atom 1000000000)
+          state (render/render-state 80 24 :clock #(deref now))
           ;; Try to render with invalid content (this should be caught internally)
           invalid-lines [123 456]  ; non-strings
           ;; This should throw but be caught inside render-frame (if validation is done there)
           ;; For now just test with valid input
           valid-lines ["test"]
-          state3 (render/render-frame state2 valid-lines)]
+          _ (reset! now 1100000000)
+          state3 (atom nil)
+          _ (with-out-str
+              (reset! state3 (render/render-frame state valid-lines)))]
       ;; Should have incremented frame count without crashing
-      (is (number? (:frame-count state3))))))
+      (is (number? (:frame-count @state3))))))
 
 (deftest test-buffer-operations-dont-crash
   (testing "Buffer operations handle edge cases gracefully"
@@ -381,19 +394,26 @@
       (is (= \space (:char retrieved))))))
 
 (deftest test-force-render-error-handling
-  (testing "force-render handles errors gracefully"
-    (let [state (render/render-state 80 24)
+  (testing "force-render writes the exact clear and frame bytes"
+    (let [clock (constantly 1000000000)
+          state (render/render-state 9 1 :clock clock)
           lines ["test line"]
-          ;; This should not crash even if there are issues
-          state2 (render/force-render state lines)]
-      (is (some? state2))
-      (is (number? (:frame-count state2))))))
+          state2 (atom nil)
+          output (with-out-str
+                   (reset! state2 (render/force-render state lines)))]
+      (is (= (str "\u001B[2J\u001B[H"
+                  "\u001B[1;1Htest\u001B[0m"
+                  "\u001B[1;6Hline\u001B[0m")
+             output))
+      (is (= 1 (:frame-count @state2))))))
 
 (deftest test-terminal-setup-and-restore
-  (testing "Terminal setup and restore don't crash"
-    ;; These functions might fail in test environment, but shouldn't throw uncaught
-    (is (nil? (render/setup-terminal)))
-    (is (nil? (render/restore-terminal)))))
+  (testing "Terminal operations write their exact control sequences"
+    (is (= "\u001B[2J\u001B[H" (with-out-str (render/clear-screen))))
+    (is (= "\u001B[?25l\u001B[2J\u001B[H"
+           (with-out-str (render/setup-terminal))))
+    (is (= "\u001B[?25h\u001B[0m"
+           (with-out-str (render/restore-terminal))))))
 
 ;; Test the new error boundary functions
 
@@ -407,15 +427,20 @@
 
 (deftest test-render-state-has-resize-check-time
   (testing "New render state includes last-resize-check"
-    (let [state (render/render-state 80 24)]
-      (is (some? (:last-resize-check state)))
-      (is (number? (:last-resize-check state))))))
+    (let [state (render/render-state 80 24 :clock (constantly 42))]
+      (is (= 42 (:last-resize-check state))))))
 
 (deftest test-terminal-size-validation
-  (testing "get-terminal-size validates bounds"
-    (let [size (render/get-terminal-size)]
-      ;; Width should be reasonable
-      (is (and (>= (:width size) 20) (<= (:width size) 500)))
-      ;; Height should be reasonable
-      (is (and (>= (:height size) 10) (<= (:height size) 200))))))
-
+  (testing "get-terminal-size accepts values within its current bounds"
+    (is (= {:width 120 :height 40}
+           (render/get-terminal-size
+            (constantly {:width 120 :height 40})))))
+  (testing "get-terminal-size silently replaces undersized dimensions"
+    ;; This legacy behavior is intentionally unchanged until limner-2-4.
+    (is (= {:width 80 :height 24}
+           (render/get-terminal-size
+            (constantly {:width 19 :height 9})))))
+  (testing "get-terminal-size clamps oversized dimensions"
+    (is (= {:width 500 :height 200}
+           (render/get-terminal-size
+            (constantly {:width 501 :height 201}))))))

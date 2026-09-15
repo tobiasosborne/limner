@@ -7,11 +7,14 @@
 
 (deftest test-stream-creation
   (testing "Create basic stream component"
-    (let [s (stream/stream :text "Hello World")]
+    (let [clock (constantly 1000)
+          s (stream/stream :text "Hello World" :clock clock)]
       (is (= "Hello World" (:text s)))
       (is (= 0 (:position s)))
       (is (= :pending (:state s)))
-      (is (= 30 (:delay-ms s)))))
+      (is (= 30 (:delay-ms s)))
+      (is (= 1000 (:last-update s)))
+      (is (identical? clock (:clock s)))))
 
   (testing "Create stream with custom options"
     (let [s (stream/stream
@@ -81,17 +84,19 @@
 ;; ────────────────────── Stream Advancement ──────────────────────
 
 (deftest test-advance-respects-delay
-  (testing "Stream doesn't advance before delay elapsed"
-    (let [s (-> (stream/stream :text "Hello" :delay-ms 10000)
-                stream/start
-                stream/advance)]
-      (is (= 0 (:position s)))))
-
-  (testing "Stream advances after delay (simulated)"
-    (let [s (stream/stream :text "Hello" :delay-ms 0)
-          started (stream/start s)
-          advanced (stream/advance started)]
-      (is (= 1 (:position advanced)))))
+  (testing "Stream advances only after the injected clock reaches the delay"
+    (let [now (atom 1000)
+          clock #(deref now)
+          started (-> (stream/stream :text "Hello"
+                                     :delay-ms 100
+                                     :clock clock)
+                      stream/start)]
+      (reset! now 1099)
+      (is (= 0 (:position (stream/advance started))))
+      (reset! now 1100)
+      (let [advanced (stream/advance started)]
+        (is (= 1 (:position advanced)))
+        (is (= 1100 (:last-update advanced))))))
 
   (testing "Stream doesn't advance when paused"
     (let [s (-> (stream/stream :text "Hello" :delay-ms 0)
@@ -236,15 +241,20 @@
 ;; ────────────────────── Cursor Blink ──────────────────────
 
 (deftest test-cursor-blink
-  (testing "Cursor toggles visibility"
-    (let [s (stream/stream :text "Hello" :cursor-blink-ms 100)]
-      ;; Initial state
-      (is (true? (:cursor-visible s)))
-
-      ;; Tick cursor should update visibility based on time
-      (let [ticked (stream/tick-cursor s)]
-        ;; cursor-visible should be a boolean
-        (is (boolean? (:cursor-visible ticked)))))))
+  (testing "Cursor visibility follows the injected clock"
+    (let [now (atom 0)
+          s (stream/stream :text "Hello"
+                           :cursor-blink-ms 100
+                           :clock #(deref now))]
+      (is (true? (:cursor-visible (stream/tick-cursor s))))
+      (reset! now 100)
+      (let [hidden (stream/tick-cursor s)]
+        (is (= 1 (:cursor-frame hidden)))
+        (is (false? (:cursor-visible hidden))))
+      (reset! now 200)
+      (let [visible (stream/tick-cursor s)]
+        (is (= 0 (:cursor-frame visible)))
+        (is (true? (:cursor-visible visible)))))))
 
 ;; ────────────────────── Integration Tests ──────────────────────
 

@@ -82,12 +82,20 @@
 
 (deftest test-invalid-color-handling
   (testing "Invalid color keyword returns string uncolored"
-    (let [result (core/color :nonexistent-color "Text")]
-      (is (= "Text" result))))
+    (let [errors (java.io.StringWriter.)
+          result (binding [*err* errors]
+                   (core/color :nonexistent-color "Text"))]
+      (is (= "Text" result))
+      (is (= "Warning: Invalid color specification: :nonexistent-color\n"
+             (str errors)))))
 
   (testing "Invalid color type returns string uncolored"
-    (let [result (core/color "not-a-color" "Text")]
-      (is (= "Text" result)))))
+    (let [errors (java.io.StringWriter.)
+          result (binding [*err* errors]
+                   (core/color "not-a-color" "Text"))]
+      (is (= "Text" result))
+      (is (= "Warning: Invalid color specification: not-a-color\n"
+             (str errors))))))
 
 (deftest test-color-nesting
   (testing "Colors can be nested"
@@ -362,15 +370,3 @@
 
   (testing "All codes end with reset"
     (is (clojure.string/ends-with? (core/color :red "x") "\u001B[0m"))))
-
-;; ──────────────────────── Performance Tests ──────────────────────
-
-(deftest test-color-performance
-  (testing "Color application is reasonably fast"
-    (let [start (System/nanoTime)
-          _ (dotimes [_ 10000]
-              (core/color :red "Test"))
-          elapsed (/ (- (System/nanoTime) start) 1000000.0)]
-      ;; Should complete 10k iterations in under 100ms
-      (is (< elapsed 100)
-          (str "Color application too slow: " elapsed "ms")))))

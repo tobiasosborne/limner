@@ -4,6 +4,17 @@
             [limner.core :as core]
             [limner.syntax :as syntax]))
 
+(defn- system-clock-ms
+  "Return wall-clock milliseconds for the production streaming clock."
+  []
+  (System/currentTimeMillis))
+
+(defn- current-time-ms
+  "Read the component's injected clock, retaining the production default for
+   stream maps created before clock injection was available."
+  [stream-component]
+  ((or (:clock stream-component) system-clock-ms)))
+
 ;; ────────────────────── Streaming Component ──────────────────────
 
 (defn stream
@@ -15,14 +26,18 @@
    - :theme - theme for syntax highlighting (default :default)
    - :show-cursor - show blinking cursor at end (default true)
    - :cursor-char - character for cursor (default \"▋\")
-   - :cursor-blink-ms - cursor blink interval in ms (default 500)"
-  [& {:keys [text delay-ms lang theme show-cursor cursor-char cursor-blink-ms]
+   - :cursor-blink-ms - cursor blink interval in ms (default 500)
+   - :clock - zero-argument millisecond clock (default System/currentTimeMillis);
+     inject a deterministic function when advancing streams in tests"
+  [& {:keys [text delay-ms lang theme show-cursor cursor-char cursor-blink-ms
+             clock]
       :or {text ""
            delay-ms 30
            theme :default
            show-cursor true
            cursor-char "▋"
-           cursor-blink-ms 500}}]
+           cursor-blink-ms 500
+           clock system-clock-ms}}]
   {:type :stream
    :text text
    :position 0
@@ -35,7 +50,8 @@
    :cursor-visible true
    :cursor-frame 0
    :state :pending  ; :pending, :streaming, :paused, :cancelled, :completed
-   :last-update (System/currentTimeMillis)})
+   :clock clock
+   :last-update (clock)})
 
 ;; ────────────────────── State Management ──────────────────────
 
@@ -44,7 +60,7 @@
   [stream-component]
   (assoc stream-component
          :state :streaming
-         :last-update (System/currentTimeMillis)))
+         :last-update (current-time-ms stream-component)))
 
 (defn pause
   "Pause streaming"
@@ -57,7 +73,7 @@
   (if (= (:state stream-component) :paused)
     (assoc stream-component
            :state :streaming
-           :last-update (System/currentTimeMillis))
+           :last-update (current-time-ms stream-component))
     stream-component))
 
 (defn cancel
@@ -71,7 +87,7 @@
   (assoc stream-component
          :position 0
          :state :pending
-         :last-update (System/currentTimeMillis)))
+         :last-update (current-time-ms stream-component)))
 
 (defn set-text
   "Update stream text and reset position"
@@ -80,7 +96,7 @@
          :text text
          :position 0
          :state :pending
-         :last-update (System/currentTimeMillis)))
+         :last-update (current-time-ms stream-component)))
 
 ;; ────────────────────── Stream Advancement ──────────────────────
 
@@ -88,7 +104,7 @@
   "Advance stream by one character if enough time has elapsed
    Returns updated stream component"
   [stream-component]
-  (let [current-time (System/currentTimeMillis)
+  (let [current-time (current-time-ms stream-component)
         elapsed (- current-time (:last-update stream-component))
         text-length (count (:text stream-component))
         position (:position stream-component)
@@ -116,8 +132,7 @@
 (defn tick-cursor
   "Update cursor blink state based on elapsed time"
   [stream-component]
-  (let [current-time (System/currentTimeMillis)
-        elapsed (- current-time (:last-update stream-component))
+  (let [current-time (current-time-ms stream-component)
         blink-interval (:cursor-blink-ms stream-component)
 
         ;; Calculate cursor frame (alternates between 0 and 1)
@@ -236,4 +251,4 @@
         clamped-pos (max 0 (min position text-length))]
     (assoc stream-component
            :position clamped-pos
-           :last-update (System/currentTimeMillis))))
+           :last-update (current-time-ms stream-component))))

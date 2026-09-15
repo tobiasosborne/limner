@@ -25,6 +25,9 @@ Creates a streaming component state map.
 - `:theme`: Theme for highlighting.
 - `:show-cursor`: Whether to show a cursor.
 - `:cursor-char`: Character to use for cursor (default "▋").
+- `:cursor-blink-ms`: Cursor blink interval in milliseconds (default 500).
+- `:clock`: Zero-argument millisecond clock. It defaults to
+  `System/currentTimeMillis`; pass a deterministic function in tests.
 
 **Returns:**
 - A stream component map.

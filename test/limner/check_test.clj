@@ -6,7 +6,17 @@
   concise status lines intended for humans running `bb check`."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is]]
-            [limner.check :as check]))
+            [limner.check :as check]
+            [limner.terminal :as terminal]))
+
+(deftest executable-discovery-uses-the-environment-seam
+  (let [requested (atom [])]
+    (with-redefs [terminal/get-env
+                  (fn [variable]
+                    (swap! requested conj variable)
+                    "/path/that/does/not/exist")]
+      (is (false? (check/command-available? "not-present"))))
+    (is (= ["PATH"] @requested))))
 
 (deftest runs-runtime-gates-in-order-and-reports-missing-lint
   (let [calls (atom [])
