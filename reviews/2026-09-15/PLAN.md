@@ -39,6 +39,9 @@ serially, one task at a time. Each task is implemented by a Codex
 `gpt-5.6-sol` subagent at `xhigh` reasoning effort; no parallel subagents.
 The orchestrator verifies each task (both test suites, the diff, CLAUDE.md
 compliance) before committing it.
+Amended 2026-09-15 (owner): related beads are batched into one Codex run.
+Within a run the worker commits locally once per bead after `bb check` passes
+(never pushes); the orchestrator reviews the run's commit range afterwards.
 
 **D1. Runtimes.** Keep babashka as a first-class runtime next to the JVM?
 - **Recommend: yes.** It is the library's distinctive niche. It rules out

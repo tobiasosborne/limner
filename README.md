@@ -30,8 +30,9 @@ require the focused namespaces instead.
 
 ## Installation
 
-There is no release tag yet. This coordinate pins a real repository revision;
-replace its 40-character SHA when you want a different revision.
+Once published, the `v0.1.0` tag will mark the legacy baseline at this
+revision. Until then, this coordinate pins that commit by its full SHA; replace
+the SHA when you want a different revision.
 
 For a Clojure project, add the dependency to `deps.edn`:
 

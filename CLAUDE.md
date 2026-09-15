@@ -247,6 +247,8 @@ to make one.
 - **All local gates:** `bb check` runs the JVM suite, the babashka suite, then
   `clj-kondo --lint src test` when `clj-kondo` is available, serially and
   fail-fast. A missing optional linter is reported explicitly.
+- **Changelog:** every user-visible change adds a line under `[Unreleased]`.
+  Credit reporters as `(#N, reported by @handle)`.
 - **README examples:** every `clojure` or `clj` fence is executed in isolation.
   A block that cannot safely run in a test needs
   `<!-- not-executed: reason -->` immediately before its opening fence. The
