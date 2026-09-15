@@ -6,6 +6,7 @@ classes/
 *.jar
 .nrepl-*
 .rebel_readline_history
+.cache/
 
 # Editors
 .idea/

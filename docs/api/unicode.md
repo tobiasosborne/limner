@@ -75,3 +75,18 @@ that only need to count or inspect source ranges, `reduce-clusters` calls a
 four-argument reducing function with the accumulator, original string, start,
 and end index; it does not allocate cluster substrings. A lone UTF-16 surrogate
 is an opaque one-unit cluster and never joins adjacent content.
+
+## Conformance and independent oracles
+
+The normal JVM and babashka suites check the pinned grapheme corpus, the full
+Emoji 17 sequence corpus, and the ADR 0001 scalar-width policy. Run the
+out-of-suite external comparisons with:
+
+```sh
+bb width-oracles
+```
+
+That task compiles the glibc `wcwidth` probe, installs pinned Python
+`wcwidth==0.2.13` in `.cache/width-oracles/venv`, and compares ICU4J through the
+existing `:icu` alias. It writes raw scratch data under `.cache/` and the
+classified report under `reviews/width-oracles/`.

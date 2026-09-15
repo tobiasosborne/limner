@@ -44,6 +44,10 @@
                           (require 'ansi-benchmark)
                           ((resolve 'ansi-benchmark/-main)))}
 
+  width-oracles {:doc "Generate the external width-oracle report"
+                 :task (shell "timeout" "600s" "clojure" "-M:benchmark:icu"
+                              "-e" "(load-file \"scripts/width-oracles.clj\") (width-oracles/-main)")}
+
   benchmark:layout {:doc "Run layout calculation benchmarks only"
                     :task (bench/-main "layout")}
 

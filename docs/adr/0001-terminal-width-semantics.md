@@ -109,6 +109,28 @@ data, while the recorded glibc probe returns width 1. Limner returns 2 for the
 pinned data. Consumers can inspect `limner.unicode/version`; runtime terminal
 guessing does not rewrite the tables.
 
+### Amendment: Emoji 17 qualification statuses (2026-09-15)
+
+The original decision states rules for individual presentation and sequence
+forms but does not name the qualification statuses in `emoji-test.txt`.
+Applying those rules to every record in the pinned Emoji 17 corpus gives:
+
+- all 3,944 fully-qualified entries are one extended grapheme cluster of
+  width 2;
+- all 1,029 minimally-qualified entries remain one cluster of width 2 because
+  the qualifying omission does not remove their sequence-level emoji rule;
+- all 9 isolated component entries are one cluster of width 2;
+- all 243 unqualified entries remain one cluster, but absent emoji
+  presentation selectors are semantically significant. Ordinary ordered
+  cluster rules give width 1 to 213 and width 2 to 30.
+
+This is not a rule that every string listed in `emoji-test.txt` is wide.
+Qualification controls presentation: unqualified text-default symbols follow
+their EAW-resolved base width unless another ADR 0001 sequence rule widens
+them. The counts above are conformance assertions tied to the pinned file
+`reference/unicode/17.0.0/emoji/17.0/emoji-test.txt` and will be reviewed when
+that version changes.
+
 ## Consequences
 
 JVM and babashka results are identical and testable without consulting the

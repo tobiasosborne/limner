@@ -20,6 +20,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added one lossless ECMA-48 tokenizer with structured SGR and OSC 8 helpers.
 - Added canonical styled text with semantic ANSI/OSC 8 parsing and rendering,
   grapheme-safe slicing, padding, centering, truncation, wrapping, and lines.
+- Added in-suite Emoji 17 conformance for all 5,225 fully-qualified,
+  minimally-qualified, unqualified, and component sequences.
+- Added reproducible glibc, pinned Python wcwidth, and ICU4J width comparisons
+  with every scalar disagreement grouped and classified against ADR 0001.
 - Added `bb test` for the babashka suite and `bb check` for the serial JVM,
   babashka, and available lint gates.
 - Added injectable clocks to the experimental render and streaming APIs, and
