@@ -4,5 +4,5 @@
  :aliases
  {;; clojure -M:test                      (all tests)
   ;; clojure -M:test -n limner.core-test  (one namespace)
-  :test {:extra-paths ["test"]
+  :test {:extra-paths ["test" "scripts"]
          :main-opts ["-m" "limner.test-runner"]}}}

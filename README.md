@@ -12,6 +12,9 @@ limner is pre-release software in the 0.x series. The API may change before
 
 Unicode width handling is being rebuilt from pinned Unicode data; follow
 [issue #2](https://github.com/tobiasosborne/limner/issues/2) for that work.
+The new [`limner.unicode`](docs/api/unicode.md) namespace exposes generated
+Unicode 17.0.0 property lookups, but `visible-width` and components have not
+been switched to them yet.
 Until the shared text layer is replaced, keep these limitations in mind:
 
 - Styles do not nest correctly yet: an inner colour or style can reset an

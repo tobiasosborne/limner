@@ -1,4 +1,4 @@
-{:paths ["src" "test"]
+{:paths ["src" "test" "scripts"]
  :deps {org.clojure/core.async {:mvn/version "1.6.681"}}
  :tasks
  {:requires ([limner.benchmarks :as bench]
@@ -9,6 +9,12 @@
   fetch-ucd {:doc "Fetch and verify a pinned Unicode version"
              :task (apply shell "bb" "scripts/fetch-ucd.clj"
                           *command-line-args*)}
+
+  gen-unicode {:doc "Regenerate Unicode lookup tables from vendored data"
+               :task (do
+                       (load-file "scripts/gen-unicode-tables.clj")
+                       (apply (ns-resolve 'gen-unicode-tables '-main)
+                              *command-line-args*))}
 
   test {:doc "Run every test namespace (optionally: bb test -n namespace)"
         :task (apply test-runner/-main *command-line-args*)}
