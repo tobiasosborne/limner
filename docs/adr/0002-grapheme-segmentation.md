@@ -99,6 +99,31 @@ Run the comparison with `clojure -M:benchmark -m grapheme-benchmark` and
 `clojure -M:test:icu`; ICU4J 78.1.0.0 agreed on all 766 conformance cases and
 500 deterministic generated strings in this run.
 
+### Phase 1.8 performance amendment
+
+The first implementation's per-code-point binary searches caused the text
+layer to miss every babashka width budget. Phase 1.8 now packs BMP GCB, InCB,
+Extended_Pictographic, width, and related properties in one 65,536-entry
+primitive table. Supplementary code points use small page indexes over the
+generated ranges, with a grapheme-only lookup that avoids unrelated width properties. Pure CJK
+ideograph and precomposed Hangul runs use GB999/GB6–GB8-proven unit boundaries.
+
+The same fixed grapheme benchmark, rerun after those changes, measured:
+
+| Corpus | Portable JVM | BreakIterator JVM | Ratio | Portable bb | BreakIterator bb | Ratio |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Printable ASCII | 18,623,515/s | 24,930,196/s | 0.747 | 731,757/s | 673,201/s | 1.087 |
+| Latin with marks | 4,133,686/s | 23,008,205/s | 0.180 | 104,710/s | 622,692/s | 0.168 |
+| CJK | 25,862,874/s | 17,674,937/s | 1.463 | 619,717/s | 610,282/s | 1.015 |
+| Emoji ZWJ | 1,312,047/s | 15,236,007/s | 0.086 | 21,492/s | 590,290/s | 0.036 |
+| Devanagari conjuncts | 2,525,000/s | 12,736,201/s | 0.198 | 63,141/s | 586,000/s | 0.108 |
+
+CJK now closes the measured host-iterator gap on both runtimes. Latin and
+Devanagari roughly double on babashka; supplementary-heavy emoji remains the
+largest segmentation gap because it still performs multiple range lookups. The
+user-facing width path additionally segments and measures in one pass and
+meets the mixed-line budgets recorded in `bench/BUDGETS.md`.
+
 ## Consequences
 
 The JVM and babashka use the same Unicode version and produce identical

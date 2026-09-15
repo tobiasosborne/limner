@@ -13,10 +13,13 @@
   ambiguous-width policy stays pure and injectable. See
   `docs/adr/0001-terminal-width-semantics.md` and the pinned sources under
   `reference/specs/` and `reference/unicode/17.0.0/`."
-  (:require [limner.unicode :as unicode]))
+  (:require [limner.unicode :as unicode]
+            [limner.unicode.width.string :as string-width]))
 
 (def ^:private valid-option-keys #{:ambiguous-width})
-(def ^:private zero-categories #{:Cc :Zl :Zp :Mn :Me :Cf})
+(def ^:private category-shift 13)
+(def ^:private scalar-width-shift 17)
+(def ^:private ambiguous-bit 19)
 
 (defn- ambiguous-width [options]
   (when-not (map? options)
@@ -33,15 +36,16 @@
                       {:options options :value value :allowed [1 2]})))
     value))
 
-(defn- validate-code-point [code-point]
+(defn- packed-code-point [code-point]
   (when-not (and (integer? code-point) (<= 0 code-point 0x10FFFF))
     (throw (ex-info "Width requires a Unicode code point from 0 through 0x10FFFF"
                     {:code-point code-point :valid-range [0 0x10FFFF]})))
-  (when (= :Cs (unicode/general-category code-point))
+  (let [packed (unicode/packed-properties code-point)]
+    (when (= 8 (bit-and 15 (bit-shift-right packed category-shift)))
     (throw (ex-info "Width is undefined for a UTF-16 surrogate code point"
                     {:code-point code-point
                      :action "Pass a Unicode scalar value, not a UTF-16 code unit"})))
-  code-point)
+    packed))
 
 (defn- eaw-width [code-point ambiguous]
   (case (unicode/east-asian-width code-point)
@@ -49,15 +53,13 @@
     :A ambiguous
     1))
 
+(defn- packed-width [packed ambiguous]
+  (if (and (= 2 ambiguous) (bit-test packed ambiguous-bit))
+    2
+    (bit-and 3 (bit-shift-right packed scalar-width-shift))))
+
 (defn- code-point-width* [code-point ambiguous]
-  (validate-code-point code-point)
-  (let [category (unicode/general-category code-point)
-        grapheme-break (unicode/grapheme-break code-point)]
-    (cond
-      (zero-categories category) 0
-      (unicode/default-ignorable? code-point) 0
-      (#{:V :T} grapheme-break) 0
-      :else (eaw-width code-point ambiguous))))
+  (packed-width (packed-code-point code-point) ambiguous))
 
 (defn code-point-width
   "Return the ADR 0001 terminal width of code-point.
@@ -98,10 +100,9 @@
       (unicode/emoji-presentation? code-point)))
 
 (defn- isolated-mark-width [first-code-point]
-  (if (and (#{:Mn :Me} (unicode/general-category first-code-point))
-           (not (unicode/default-ignorable? first-code-point)))
-    1
-    0))
+  (let [packed (unicode/packed-properties first-code-point)
+        category (bit-and 15 (bit-shift-right packed category-shift))]
+    (if (and (#{1 2} category) (not (bit-test packed 12))) 1 0)))
 
 (defn cluster-width
   "Return the ADR 0001 width of one caller-asserted grapheme cluster.
@@ -128,3 +129,13 @@
       (emoji-zwj-sequence? points) 2
       (keycap-sequence? points) 2
       :else base-width)))
+
+(defn string-width
+  "Return ADR 0001 width for a complete plain string.
+
+  The implementation delegates to the allocation-free, one-pass scanner in
+  `limner.unicode.width.string`; this function owns public option validation."
+  [text options]
+  (when-not (string? text)
+    (throw (ex-info "String width requires a string" {:text text})))
+  (string-width/width text (ambiguous-width options)))

@@ -86,6 +86,19 @@
                                      []
                                      "a😀b")))))
 
+(deftest cjk-and-precomposed-hangul-fast-path-matches-general-scanner
+  (let [reduce-general (ns-resolve 'limner.unicode.grapheme 'reduce-general)
+        segment (fn [value]
+                  (persistent!
+                   (reduce-general value
+                                   (fn [parts ^String source start end]
+                                     (conj! parts (subs source start end)))
+                                   (transient []))))]
+    (doseq [value [(apply str (repeat 80 "中"))
+                   (apply str (repeat 80 "한"))
+                   "中文한글漢字"]]
+      (is (= (segment value) (grapheme/clusters value))))))
+
 (deftest unpaired-surrogates-are-isolated
   (let [high (String. (char-array [(char 0xD800)]))
         low (String. (char-array [(char 0xDC00)]))]

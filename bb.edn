@@ -1,4 +1,4 @@
-{:paths ["src" "test" "scripts"]
+{:paths ["src" "test" "scripts" "bench"]
  :deps {org.clojure/core.async {:mvn/version "1.6.681"}}
  :tasks
  {:requires ([limner.benchmarks :as bench]
@@ -43,6 +43,17 @@
                   :task (do
                           (require 'ansi-benchmark)
                           ((resolve 'ansi-benchmark/-main)))}
+
+  benchmark:text {:doc "Measure styled-text operations and width baselines"
+                  :task (do
+                          (require 'limner.text-bench)
+                          ((resolve 'limner.text-bench/-main)))}
+
+  bench-check {:doc "Check text performance budgets on JVM and babashka"
+               :task (do
+                       (shell "timeout" "180s" "clojure" "-M:text-bench" "--check")
+                       (require 'limner.text-bench)
+                       ((resolve 'limner.text-bench/-main) "--check"))}
 
   width-oracles {:doc "Generate the external width-oracle report"
                  :task (shell "timeout" "600s" "clojure" "-M:benchmark:icu"

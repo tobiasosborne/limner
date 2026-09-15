@@ -35,8 +35,10 @@ bb test -n limner.unicode-test
 ```
 
 The generated namespace embeds the source paths and checksums and uses merged,
-flat primitive range tables with binary search. `limner.text` combines these
-properties with grapheme segmentation and ANSI-aware column operations;
+flat primitive source ranges. At load time `limner.unicode` packs BMP GCB,
+InCB, EAW, width class, General Category, and emoji flags into a 65,536-entry
+primitive table; supplementary planes use page indexes into the source ranges. `limner.text`
+combines these properties with ANSI-aware column operations, and
 `limner.core/visible-width` delegates to that layer.
 
 ## Terminal width policy

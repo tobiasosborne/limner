@@ -19,7 +19,11 @@
   0002 and does not change conforming Unicode input."
   (:require [limner.unicode :as unicode]))
 
-(def ^:private controls #{:Control :CR :LF})
+(defn- grapheme-code [packed]
+  (bit-and 15 (bit-shift-right packed 3)))
+
+(defn- incb-code [packed]
+  (bit-and 3 (bit-shift-right packed 7)))
 
 (defn- fail-unless-string [text]
   (when-not (string? text)
@@ -60,6 +64,19 @@
             (and (<= 0x20 unit 0x7E)
                  (recur (inc index))))))))
 
+(defn- simple-unit-run? [^String text]
+  ;; Every value here has GCB Other, LV, or LVT. Adjacent precomposed Hangul
+  ;; syllables do not match GB6–GB8, so GB999 separates every UTF-16 unit.
+  (let [length (.length text)]
+    (and (pos? length)
+         (loop [index 0]
+           (or (= index length)
+               (let [unit (int (.charAt text index))]
+                 (and (or (<= 0x3400 unit 0x4DBF)
+                          (<= 0x4E00 unit 0x9FFF)
+                          (<= 0xAC00 unit 0xD7A3))
+                      (recur (inc index)))))))))
+
 (defn- reduce-ascii
   [^String text rf init]
   (let [length (.length text)]
@@ -72,15 +89,15 @@
             (recur (inc index) next-result)))))))
 
 (defn- initial-incb-state [incb]
-  (if (= :Consonant incb) 1 0))
+  (if (= 2 incb) 1 0))
 
 (defn- next-incb-state [state incb boundary?]
   (if boundary?
     (initial-incb-state incb)
     (case incb
-      :Consonant 1
-      :Extend (if (pos? state) state 0)
-      :Linker (if (pos? state) 2 0)
+      2 1
+      3 (if (pos? state) state 0)
+      1 (if (pos? state) 2 0)
       0)))
 
 (defn- next-emoji-state [state grapheme-break extended-pictographic? boundary?]
@@ -88,8 +105,8 @@
     (if extended-pictographic? 1 0)
     (cond
       extended-pictographic? 1
-      (= :Extend grapheme-break) (if (= 1 state) 1 0)
-      (= :ZWJ grapheme-break) (if (= 1 state) 2 0)
+      (= 4 grapheme-break) (if (= 1 state) 1 0)
+      (= 11 grapheme-break) (if (= 1 state) 2 0)
       :else 0)))
 
 (defn- boundary?
@@ -97,18 +114,18 @@
    incb-state current-incb emoji-state current-extended-pictographic? ri-run]
   (cond
     (or previous-lone? current-lone?) true
-    (and (= :CR previous-break) (= :LF current-break)) false
-    (controls previous-break) true
-    (controls current-break) true
-    (and (= :L previous-break) (#{:L :V :LV :LVT} current-break)) false
-    (and (#{:LV :V} previous-break) (#{:V :T} current-break)) false
-    (and (#{:LVT :T} previous-break) (= :T current-break)) false
-    (#{:Extend :ZWJ} current-break) false
-    (= :SpacingMark current-break) false
-    (= :Prepend previous-break) false
-    (and (= :Consonant current-incb) (= 2 incb-state)) false
+    (and (= 1 previous-break) (= 2 current-break)) false
+    (<= 1 previous-break 3) true
+    (<= 1 current-break 3) true
+    (and (= 8 previous-break) (#{8 9 12 13} current-break)) false
+    (and (#{12 9} previous-break) (#{9 10} current-break)) false
+    (and (#{13 10} previous-break) (= 10 current-break)) false
+    (#{4 11} current-break) false
+    (= 7 current-break) false
+    (= 6 previous-break) false
+    (and (= 2 current-incb) (= 2 incb-state)) false
     (and current-extended-pictographic? (= 2 emoji-state)) false
-    (and (= :Regional_Indicator current-break) (odd? ri-run)) false
+    (and (= 5 current-break) (odd? ri-run)) false
     :else true))
 
 (defn- reduce-general
@@ -117,17 +134,17 @@
         first-code-point (scalar-at text 0 length)
         first-end (scalar-end text 0 length)
         first-lone? (lone-surrogate? text 0 length)
-        first-break (if first-lone? :Lone (unicode/grapheme-break first-code-point))
-        first-incb (if first-lone? :None (unicode/incb first-code-point))
-        first-pictographic? (and (not first-lone?)
-                                (unicode/extended-pictographic? first-code-point))]
+        first-packed (when-not first-lone? (unicode/grapheme-properties first-code-point))
+        first-break (if first-lone? -1 (grapheme-code first-packed))
+        first-incb (if first-lone? 0 (incb-code first-packed))
+        first-pictographic? (and (not first-lone?) (bit-test first-packed 9))]
     (loop [cluster-start 0
            index first-end
            previous-break first-break
            previous-lone? first-lone?
            incb-state (initial-incb-state first-incb)
            emoji-state (if first-pictographic? 1 0)
-           ri-run (if (= :Regional_Indicator first-break) 1 0)
+           ri-run (if (= 5 first-break) 1 0)
            result init]
       (if (= index length)
         (let [next-result (rf result text cluster-start length)]
@@ -135,12 +152,10 @@
         (let [code-point (scalar-at text index length)
               end (scalar-end text index length)
               current-lone? (lone-surrogate? text index length)
-              current-break (if current-lone?
-                              :Lone
-                              (unicode/grapheme-break code-point))
-              current-incb (if current-lone? :None (unicode/incb code-point))
-              current-pictographic? (and (not current-lone?)
-                                         (unicode/extended-pictographic? code-point))
+              packed (when-not current-lone? (unicode/grapheme-properties code-point))
+              current-break (if current-lone? -1 (grapheme-code packed))
+              current-incb (if current-lone? 0 (incb-code packed))
+              current-pictographic? (and (not current-lone?) (bit-test packed 9))
               break? (boundary? previous-break current-break
                                 previous-lone? current-lone?
                                 incb-state current-incb emoji-state
@@ -157,7 +172,7 @@
                    (next-incb-state incb-state current-incb break?)
                    (next-emoji-state emoji-state current-break
                                      current-pictographic? break?)
-                   (if (= :Regional_Indicator current-break)
+                   (if (= 5 current-break)
                      (if break? 1 (inc ri-run))
                      0)
                    next-result)))))))
@@ -176,6 +191,7 @@
   (cond
     (zero? (.length ^String text)) init
     (printable-ascii? text) (reduce-ascii text rf init)
+    (simple-unit-run? text) (reduce-ascii text rf init)
     :else (reduce-general text rf init)))
 
 (defn cluster-boundaries

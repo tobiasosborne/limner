@@ -257,7 +257,9 @@ to make one.
   `<!-- not-executed: reason -->` immediately before its opening fence. The
   reason must name the concrete side effect or blocking behaviour.
 - **Babashka tasks:** `bb tasks` lists them; the benchmarks are
-  `bb benchmark[:suite]`.
+  `bb benchmark[:suite]`. Styled-text measurements are `clojure -M:text-bench`
+  and `bb benchmark:text`; `bb bench-check` runs the short JVM and babashka
+  timing budgets serially and is intentionally outside `bb check`.
 - **Reflection:** loading every namespace with `*warn-on-reflection*` on
   printed 18 warnings on 2026-09-15. Do not add new ones.
 - **Evidence scripts** for audit claims live under `reviews/<date>/evidence/`.

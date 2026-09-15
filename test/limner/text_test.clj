@@ -5,7 +5,8 @@
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [limner.text :as text]
-            [limner.unicode.grapheme :as grapheme]))
+            [limner.unicode.grapheme :as grapheme]
+            [limner.unicode.width :as unicode-width]))
 
 (def esc "\u001B")
 (def st "\u001B\\")
@@ -70,6 +71,49 @@
   (is (= 2 (text/width "★" {:ambiguous-width 2})))
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"options"
                         (text/width "x" {:unknown true}))))
+
+(defn- slow-width [value options]
+  (reduce + (map #(unicode-width/cluster-width % options)
+                 (grapheme/clusters value))))
+
+(def fast-run-gen
+  (gen/one-of
+   [(gen/fmap #(apply str (map char %)) (gen/vector (gen/choose 0x20 0x7E) 0 120))
+    (gen/fmap #(apply str (map char %)) (gen/vector (gen/choose 0 0xFF) 0 120))
+    (gen/fmap #(apply str (map char %)) (gen/vector (gen/choose 0x3400 0x9FFF) 0 120))
+    (gen/fmap #(apply str (map char %)) (gen/vector (gen/choose 0xAC00 0xD7A3) 0 120))]))
+
+(deftest whole-run-fast-paths-equal-the-conforming-slow-path
+  (let [result (tc/quick-check
+                500
+                (prop/for-all [value fast-run-gen, ambiguous (gen/elements [1 2])]
+                  (= (slow-width value {:ambiguous-width ambiguous})
+                     (unicode-width/string-width value {:ambiguous-width ambiguous})))
+                :seed 318001)]
+    (is (:pass? result) (pr-str (dissoc result :result-data)))))
+
+(defn- code-point-string [code-point]
+  (String. (Character/toChars code-point)))
+
+(def scalar-gen
+  (gen/one-of [(gen/choose 0 0xD7FF) (gen/choose 0xE000 0x10FFFF)]))
+
+(def general-string-gen
+  (gen/fmap #(apply str %)
+            (gen/vector
+             (gen/frequency
+              [[7 (gen/fmap code-point-string scalar-gen)]
+               [3 (gen/elements ["é" "👩‍🔬" "🇩🇪" "क्ष" "\r\n" "\u200B"])]] )
+             0 60)))
+
+(deftest one-pass-width-equals-segment-then-measure
+  (let [result (tc/quick-check
+                500
+                (prop/for-all [value general-string-gen, ambiguous (gen/elements [1 2])]
+                  (= (slow-width value {:ambiguous-width ambiguous})
+                     (unicode-width/string-width value {:ambiguous-width ambiguous})))
+                :seed 318002)]
+    (is (:pass? result) (pr-str (dissoc result :result-data)))))
 
 (deftest slicing-never-emits-partial-graphemes
   (testing "a cut through a wide cluster becomes styled spaces"

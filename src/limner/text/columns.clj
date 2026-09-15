@@ -6,7 +6,8 @@
   events at UTF-16 offsets, and attach them to Unicode 17 grapheme units. Raw
   controls never contribute width. Public callers use `limner.text`."
   (:refer-clojure :exclude [lines])
-  (:require [limner.text.style :as style]
+  (:require [limner.ansi :as ansi]
+            [limner.text.style :as style]
             [limner.unicode.grapheme :as grapheme]
             [limner.unicode.width :as unicode-width]))
 
@@ -78,9 +79,36 @@
           (cond-> result (seq trailing)
             (conj {:column column :width 0 :plain "" :content trailing})))))))
 
+(defn- printable-ascii-width [^String input]
+  (when (every? #(<= 0x20 (int %) 0x7E) input)
+    (count input)))
+
+(defn- simple-wide-width [^String input]
+  (when (and (seq input)
+             (every? (fn [unit]
+                       (let [unit (int unit)]
+                         (or (<= 0x3400 unit 0x4DBF)
+                             (<= 0x4E00 unit 0x9FFF)
+                             (<= 0xAC00 unit 0xD7A3))))
+                     input))
+    (* 2 (count input))))
+
+(defn default-width [input]
+  (if (string? input)
+    (or (printable-ascii-width input)
+        (simple-wide-width input)
+        (unicode-width/string-width (ansi/strip input) {:ambiguous-width 1}))
+    (let [{:keys [plain]} (source input)]
+      (unicode-width/string-width plain {:ambiguous-width 1}))))
+
 (defn width [input width-options]
   (let [width-options (options width-options)]
-    (reduce + 0 (map :width (units input width-options)))))
+    (if (string? input)
+      (or (printable-ascii-width input)
+          (simple-wide-width input)
+          (unicode-width/string-width (ansi/strip input) width-options))
+      (let [{:keys [plain]} (source input)]
+        (unicode-width/string-width plain width-options)))))
 
 (defn- validate-bounds [start end]
   (when-not (and (integer? start) (integer? end) (<= 0 start end))

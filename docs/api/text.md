@@ -60,6 +60,8 @@ measuring operations supports `{:ambiguous-width 1}` (the default) or
 
 Opaque controls and invisible clusters have width zero. Column operations
 preserve opaque spans but do not simulate cursor movement or tab stops.
+The measured two-runtime corpus and regression budgets are in
+[`bench/BUDGETS.md`](../../bench/BUDGETS.md).
 
 ## References
 

@@ -36,7 +36,7 @@
 
 (defn width
   "Return display columns. Options support `:ambiguous-width` 1 or 2."
-  ([input] (columns/width input {}))
+  ([input] (columns/default-width input))
   ([input options] (columns/width input options)))
 
 (defn slice-columns

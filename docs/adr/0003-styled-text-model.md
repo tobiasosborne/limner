@@ -113,8 +113,9 @@ result, so nested calls restore the outer style after an inner span.
 ## Consequences
 
 Styled values are pure data and behave identically on the JVM and babashka.
-Column operations allocate canonical span vectors, while width can use the
-allocation-free grapheme reducer. Arbitrary cursor movement remains opaque:
+Column operations allocate canonical span vectors, while width segments and
+measures plain text in one pass without cluster strings. Arbitrary cursor
+movement remains opaque:
 preserving such controls avoids information loss, but column operations do not
 attempt to simulate terminal cursor state.
 

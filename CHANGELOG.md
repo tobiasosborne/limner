@@ -24,6 +24,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   minimally-qualified, unqualified, and component sequences.
 - Added reproducible glibc, pinned Python wcwidth, and ICU4J width comparisons
   with every scalar disagreement grouped and classified against ADR 0001.
+- Added a fixed two-runtime styled-text benchmark corpus and a separate
+  `bb bench-check` regression gate with measured width budgets.
 - Added `bb test` for the babashka suite and `bb check` for the serial JVM,
   babashka, and available lint gates.
 - Added injectable clocks to the experimental render and streaming APIs, and
@@ -50,6 +52,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   grapheme segmenter, including the REVIEW C1 probes (#2, reported by @pmonks).
 - Made nested `core/color` calls restore outer styles through the styled-text
   model rather than clearing them with an inner full reset.
+- Made BMP Unicode property lookup O(1), added proven ASCII/CJK/Hangul run
+  paths, and combined grapheme segmentation with width measurement in one pass.
 
 ### Deprecated
 
