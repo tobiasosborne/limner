@@ -3,7 +3,12 @@
  :tasks
  {:requires ([limner.benchmarks :as bench]
              [limner.check :as check]
-             [limner.test-runner :as test-runner])
+             [limner.test-runner :as test-runner]
+             [babashka.process :refer [shell]])
+
+  fetch-ucd {:doc "Fetch and verify a pinned Unicode version"
+             :task (apply shell "bb" "scripts/fetch-ucd.clj"
+                          *command-line-args*)}
 
   test {:doc "Run every test namespace (optionally: bb test -n namespace)"
         :task (apply test-runner/-main *command-line-args*)}
