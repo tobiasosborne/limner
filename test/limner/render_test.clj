@@ -74,6 +74,9 @@
   (testing "Strip ANSI codes from string"
     (is (= "Hello" (render/strip-ansi "\u001B[31mHello\u001B[0m")))
     (is (= "Hello World" (render/strip-ansi "\u001B[31mHello\u001B[32m World\u001B[0m")))
+    (is (= "link"
+           (render/strip-ansi
+            "\u001B[2K\u001B]8;;https://x\u001B\\link\u001B]8;;\u001B\\")))
     (is (= "Plain" (render/strip-ansi "Plain")))))
 
 (deftest test-parse-line-with-ansi
@@ -94,7 +97,11 @@
           cells (render/parse-line-with-ansi line)]
       (is (= 8 (count cells)))
       (is (= \B (:char (first cells))))
-      (is (= "\u001B[31m\u001B[1m" (:ansi (first cells)))))))
+      (is (= "\u001B[31m\u001B[1m" (:ansi (first cells))))))
+
+  (testing "Non-SGR controls do not become cells or style state"
+    (is (= [(render/cell \h "") (render/cell \i "")]
+           (render/parse-line-with-ansi "\u001B[2Khi")))))
 
 ;; ──────────────────────── Buffer Writing Tests ──────────────────────
 

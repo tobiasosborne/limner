@@ -1,6 +1,6 @@
 (ns limner.core
   "Terminal and ANSI escape sequence utilities"
-  (:require [clojure.string :as str]))
+  (:require [limner.ansi :as ansi]))
 
 ;; ────────────────────── ANSI Escape Codes ──────────────────────
 
@@ -337,11 +337,6 @@
       ;; fall back to the widest code point in the cluster
       :else (reduce max 0 (map char-width (.toArray (.codePoints cluster)))))))
 
-(defn- strip-ansi
-  "Remove ANSI escape sequences from string"
-  [s]
-  (str/replace s #"\u001B\[[0-9;]*m" ""))
-
 (defn visible-width
   "Calculate accurate display width of string accounting for Unicode
 
@@ -364,7 +359,7 @@
   [s]
   (when-not s
     (throw (ex-info "Cannot calculate width of nil string" {:string s})))
-  (let [^String clean (strip-ansi s)]
+  (let [^String clean (ansi/strip s)]
     (if (every? #(<= 0x20 (int %) 0x7E) clean)
       ;; Fast path: printable ASCII is always one column per char
       (.length clean)
@@ -380,7 +375,7 @@
    It's kept for backward compatibility but will give incorrect
    results for CJK text, emoji, and other Unicode edge cases."
   [s]
-  (count (strip-ansi s)))
+  (count (ansi/strip s)))
 
 ;; ────────────────────── Terminal Control ──────────────────────
 (defn hide-cursor

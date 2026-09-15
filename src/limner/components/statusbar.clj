@@ -1,6 +1,6 @@
 (ns limner.components.statusbar
   "Status bar component with left/center/right sections, like Claude Code"
-  (:require [clojure.string :as str]
+  (:require [limner.ansi :as ansi]
             [limner.core :as core]))
 
 ;; ────────────────────── ANSI Background Colors ──────────────────────
@@ -61,7 +61,7 @@
     (if (<= visible max-length)
       text
       ;; Strip ANSI codes, truncate, add ellipsis
-      (let [plain (str/replace text #"\u001B\[[0-9;]*m" "")
+      (let [plain (ansi/strip text)
             truncated (if (> max-length 3)
                        (str (subs plain 0 (- max-length 3)) "...")
                        (subs plain 0 max-length))]
@@ -119,9 +119,9 @@
   "Render statusbar to string with background color and proper spacing"
   [{:keys [left center right width bg-color fg-color] :as statusbar}]
   (let [;; Strip any existing ANSI codes from content for accurate measurement
-        left-plain (str/replace left #"\u001B\[[0-9;]*m" "")
-        center-plain (str/replace center #"\u001B\[[0-9;]*m" "")
-        right-plain (str/replace right #"\u001B\[[0-9;]*m" "")
+        left-plain (ansi/strip left)
+        center-plain (ansi/strip center)
+        right-plain (ansi/strip right)
 
         ;; Calculate layout
         layout (calculate-section-widths left-plain center-plain right-plain width)

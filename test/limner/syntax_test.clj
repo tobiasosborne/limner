@@ -295,6 +295,11 @@
           highlighted (syntax/highlight code :clojure)]
       (is (str/includes? highlighted "λ")))))
 
+(deftest strip-colors-removes-all-terminal-controls
+  (is (= "link"
+         (syntax/strip-colors
+          "\u001B[2K\u001B]8;;https://x\u001B\\link\u001B]8;;\u001B\\"))))
+
 ;; ────────────────────── Language Detection ──────────────────────
 (deftest test-language-detection
   (testing "Detect language from extension"

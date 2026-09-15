@@ -16,14 +16,16 @@ The new [`limner.unicode`](docs/api/unicode.md) namespace exposes generated
 Unicode 17.0.0 property lookups, portable extended-grapheme segmentation, and
 explicit code-point/cluster width helpers, but `visible-width` and components
 have not been switched to them yet.
+The new [`limner.ansi`](docs/api/ansi.md) namespace is the shared, lossless
+ECMA-48 tokenizer used wherever controls must be removed from text.
 Until the shared text layer is replaced, keep these limitations in mind:
 
 - Styles do not nest correctly yet: an inner colour or style can reset an
   outer one.
 - Components can misalign or clip text containing CJK characters, emoji, or
   existing ANSI colours.
-- Width calculation recognises SGR colour sequences but not every terminal
-  control sequence, including OSC hyperlinks.
+- The render buffer still stores UTF-16 code units rather than grapheme cells,
+  although terminal controls are now tokenized centrally and have zero width.
 
 The core surface is the colour, border, layout, terminal, panel, list, input,
 progress, and status-bar namespaces. These namespaces are experimental while
@@ -180,6 +182,7 @@ Output:
 
 | Namespace | What it does | Status |
 |---|---|---|
+| `limner.ansi` | Lossless ECMA-48 tokenization and control stripping | Core |
 | `limner.unicode` | Generated Unicode 17 property lookups | Core |
 | `limner.unicode.grapheme` | Portable extended grapheme segmentation | Core |
 | `limner.core` | ANSI colours and current display-width helpers | Core |

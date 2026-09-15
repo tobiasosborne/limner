@@ -1,5 +1,6 @@
 (ns limner.components.statusbar-test
   (:require [clojure.test :refer [deftest is testing]]
+            [limner.ansi :as ansi]
             [limner.components.statusbar :as statusbar]
             [limner.core :as core]
             [clojure.string :as str]))
@@ -44,19 +45,19 @@
     (let [bar (statusbar/statusbar :left "LEFT" :width 20)
           rendered (statusbar/render bar)
           ;; Strip ANSI codes to check layout
-          plain (str/replace rendered #"\u001B\[[0-9;]*m" "")]
+          plain (ansi/strip rendered)]
       (is (str/starts-with? plain "LEFT"))))
 
   (testing "Right section aligns to right"
     (let [bar (statusbar/statusbar :right "RIGHT" :width 20)
           rendered (statusbar/render bar)
-          plain (str/replace rendered #"\u001B\[[0-9;]*m" "")]
+          plain (ansi/strip rendered)]
       (is (str/ends-with? plain "RIGHT"))))
 
   (testing "Center section is centered"
     (let [bar (statusbar/statusbar :center "MID" :width 20)
           rendered (statusbar/render bar)
-          plain (str/replace rendered #"\u001B\[[0-9;]*m" "")
+          plain (ansi/strip rendered)
           center-pos (.indexOf plain "MID")
           expected-pos (/ (- 20 3) 2)] ; 3 is length of "MID"
       ;; Center should be roughly in the middle (allowing for rounding)
@@ -94,8 +95,15 @@
     (let [bar (statusbar/statusbar :left "This is a very long message"
                                    :width 15)
           rendered (statusbar/render bar)
-          plain (str/replace rendered #"\u001B\[[0-9;]*m" "")]
+          plain (ansi/strip rendered)]
       (is (str/includes? plain "...")))))
+
+(deftest non-sgr-controls-do-not-enter-statusbar-layout
+  (is (= "link    \u001B[0m"
+         (statusbar/render
+          (statusbar/statusbar
+           :left "\u001B]8;;https://x\u001B\\link\u001B]8;;\u001B\\"
+           :width 8 :bg-color nil :fg-color nil)))))
 
 ;; ────────────────────── Background Color Tests ──────────────────────
 (deftest test-background-colors

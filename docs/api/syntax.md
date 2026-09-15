@@ -37,6 +37,12 @@ Applies the configured token colors for a language rule set.
 
 Same as `highlight` but adds line numbers on the left.
 
+### `strip-colors`
+`(strip-colors s)`
+
+Returns only text tokens, removing SGR and other ECMA-48 controls through
+`limner.ansi/strip`. Line feeds and tabs remain in the text.
+
 ## Themes
 
 Themes define color mappings for token types.

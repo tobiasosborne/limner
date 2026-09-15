@@ -90,9 +90,10 @@ Creates an empty screen buffer.
 ### `write-string-to-buffer`
 `(write-string-to-buffer buffer x y s)`
 
-Writes a string into the buffer at the specified position, recognizing SGR
-color sequences. Each UTF-16 code unit becomes one cell, and other terminal
-control sequences are treated as text.
+Writes a string into the buffer at the specified position. ECMA-48 controls do
+not become cells; SGR tokens are accumulated in the existing `:ansi` cell
+field. Each UTF-16 code unit still becomes one cell, so non-BMP characters are
+not represented correctly until the render cell-model work in PLAN 2.2.
 
 ## Rendering Internals
 

@@ -169,6 +169,6 @@ Creates a status bar.
 
 Renders the status bar string.
 
-The renderer strips SGR sequences already present in section content and uses
-UTF-16 positions rather than terminal columns, so styled or wide Unicode
-content is not preserved reliably.
+The renderer strips ECMA-48 controls already present in section content and
+uses UTF-16 positions rather than terminal columns, so caller styling is
+discarded and wide Unicode content is not preserved reliably.

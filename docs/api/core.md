@@ -115,11 +115,12 @@ Estimates the display width of a string.
 **Returns:**
 - Integer width (visual columns).
 
-The implementation removes SGR color sequences, uses `BreakIterator` for
-segmentation, and uses hand-maintained width ranges. Other terminal control
-sequences, including OSC hyperlinks and non-SGR CSI sequences, are counted as
-text. Some Unicode properties and grapheme boundaries are also wrong, so do
-not rely on this function for exact terminal-column layout yet.
+The implementation removes controls through `limner.ansi`, then uses
+`BreakIterator` for segmentation and hand-maintained width ranges. OSC
+hyperlinks, non-SGR CSI sequences, and other recognized ECMA-48 controls are
+therefore zero-width. Some Unicode properties and grapheme boundaries remain
+wrong until PLAN 1.6 switches this function to the new Unicode text foundation,
+so do not rely on it for exact terminal-column layout yet.
 
 **Example:**
 ```clojure
@@ -131,8 +132,8 @@ not rely on this function for exact terminal-column layout yet.
 ### `visible-length`
 `(visible-length s)`
 
-**DEPRECATED**. Use `visible-width` instead. Removes SGR color sequences and
-counts UTF-16 code units; it does not measure terminal columns.
+**DEPRECATED**. Use `visible-width` instead. Removes ECMA-48 controls and counts
+UTF-16 code units; it does not measure terminal columns.
 
 ## Terminal Control
 

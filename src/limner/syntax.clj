@@ -1,6 +1,7 @@
 (ns limner.syntax
   "Language-aware syntax highlighting with pluggable rules and themes"
   (:require [clojure.string :as str]
+            [limner.ansi :as ansi]
             [limner.core :as core]))
 
 ;; ────────────────────── Themes ──────────────────────
@@ -299,6 +300,6 @@
          (str/join "\n"))))
 
 (defn strip-colors
-  "Remove ANSI color codes from string"
+  "Remove ECMA-48 controls from a highlighted string."
   [s]
-  (str/replace s #"\u001B\[[0-9;]*m" ""))
+  (ansi/strip s))

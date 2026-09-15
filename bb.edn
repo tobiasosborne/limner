@@ -39,6 +39,11 @@
                               (require 'grapheme-benchmark)
                               ((resolve 'grapheme-benchmark/-main)))}
 
+  benchmark:ansi {:doc "Measure ECMA-48 tokenization and stripping"
+                  :task (do
+                          (require 'ansi-benchmark)
+                          ((resolve 'ansi-benchmark/-main)))}
+
   benchmark:layout {:doc "Run layout calculation benchmarks only"
                     :task (bench/-main "layout")}
 

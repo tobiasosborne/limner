@@ -296,6 +296,11 @@
   (testing "String with only ANSI codes"
     (is (= 0 (core/visible-width "\u001B[31m\u001B[0m"))))
 
+  (testing "non-SGR CSI and OSC 8 controls have zero width"
+    (is (= 2 (core/visible-width "\u001B[2Khi")))
+    (is (= 4 (core/visible-width
+              "\u001B]8;;http://x\u001B\\link\u001B]8;;\u001B\\"))))
+
   (testing "Very long strings"
     (let [long-str (apply str (repeat 10000 "A"))]
       (is (= 10000 (core/visible-width long-str)))))

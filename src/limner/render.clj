@@ -2,6 +2,7 @@
   "Efficient render loop with diff-based updates and double buffering"
   (:require [clojure.java.shell]
             [clojure.string :as str]
+            [limner.ansi :as ansi]
             [limner.core :as core]))
 
 ;; ────────────────────── Screen Buffer ──────────────────────
@@ -47,48 +48,45 @@
 
 ;; ────────────────────── ANSI Code Extraction ──────────────────────
 
-(def ansi-pattern
-  "Regex pattern to match ANSI escape sequences"
-  #"\u001B\[[0-9;]*m")
-
 (defn extract-ansi-state
-  "Extract accumulated ANSI codes from a string up to position"
+  "Extract accumulated SGR tokens from a string."
   [s]
-  (let [matches (re-seq ansi-pattern s)]
-    (if (seq matches)
-      (str/join matches)
-      "")))
+  (->> (ansi/tokenize s)
+       (keep (fn [{:keys [type final raw]}]
+               (when (and (= :csi type) (= \m final)) raw)))
+       (str/join)))
 
 (defn strip-ansi
-  "Remove ANSI codes from string"
+  "Remove ECMA-48 controls from a string."
   [s]
-  (str/replace s ansi-pattern ""))
+  (ansi/strip s))
+
+(defn- append-text-cells [cells ^String text current-ansi]
+  (loop [index 0, cells cells]
+    (if (= index (.length text))
+      cells
+      (recur (inc index)
+             (conj! cells (cell (.charAt text index) current-ansi))))))
 
 (defn parse-line-with-ansi
   "Parse a line with ANSI codes into a sequence of cells
    Returns vector of {:char c :ansi \"codes\"}"
   [line]
-  (let [chars (vec line)
-        result (atom [])
-        current-ansi (atom "")
-        i (atom 0)]
+  (let [{:keys [cells]}
+        (reduce (fn [{:keys [cells current-ansi] :as state}
+                     {:keys [type final raw text]}]
+                  (cond
+                    (and (= :csi type) (= \m final))
+                    (assoc state :current-ansi (str current-ansi raw))
 
-    (while (< @i (count chars))
-      (let [remaining (subs line @i)
-            ansi-match (re-find ansi-pattern remaining)]
+                    (= :text type)
+                    (assoc state :cells
+                           (append-text-cells cells text current-ansi))
 
-        (if (and ansi-match (= @i (.indexOf line ansi-match @i)))
-          ;; Found ANSI code at current position
-          (do
-            (swap! current-ansi str ansi-match)
-            (swap! i + (count ansi-match)))
-
-          ;; Regular character
-          (let [ch (nth chars @i)]
-            (swap! result conj (cell ch @current-ansi))
-            (swap! i inc)))))
-
-    @result))
+                    :else state))
+                {:cells (transient []) :current-ansi ""}
+                (ansi/tokenize line))]
+    (persistent! cells)))
 
 ;; ────────────────────── Buffer Writing ──────────────────────
 

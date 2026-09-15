@@ -17,6 +17,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   code-point and caller-asserted cluster width functions.
 - Added portable Unicode 17.0 extended-grapheme segmentation, official
   conformance coverage, property tests, and an optional ICU4J oracle.
+- Added one lossless ECMA-48 tokenizer with structured SGR and OSC 8 helpers.
 - Added `bb test` for the babashka suite and `bb check` for the serial JVM,
   babashka, and available lint gates.
 - Added injectable clocks to the experimental render and streaming APIs, and
@@ -35,6 +36,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Kept invisible and structural all-zero grapheme clusters at zero terminal
   width while retaining the explicit isolated-combining-mark fallback.
+- Made non-SGR CSI sequences, OSC 8 hyperlinks, and other ECMA-48 controls
+  zero-width everywhere that previously used the SGR-only regular expression.
 
 ### Deprecated
 
