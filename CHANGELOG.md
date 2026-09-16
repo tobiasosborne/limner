@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.0] - 2026-09-16
+
 ### Changed (breaking)
 
 ADR 0004 replaces swallowed errors and fabricated fallbacks with `ex-info`.
@@ -102,6 +106,8 @@ The following functions changed their error behaviour:
 
 ### Added
 
+- Added `examples/issue2_demo.clj`, a two-runtime demonstration of grapheme
+  width, column padding and style composition for issue #2.
 - Pinned the Unicode Character Database at 17.0.0, with the Emoji 17.0 test
   data, checksums, an offline integrity test, and a guarded refresh command.
 - Added deterministic Unicode table generation and binary-searched property

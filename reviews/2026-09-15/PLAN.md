@@ -130,57 +130,21 @@ or declare input out of scope?
 The former phase plan is tracked in beads: run `bd list` for all work and
 `bd ready` for the next unblocked item.
 
-## Draft outreach (for owner approval; do not post as-is without review)
+## Outreach status
 
-### Reply on limner#2
-
-> Thanks for running that. It was very useful. I compared your glibc table
-> with limner and with the Unicode 17.0.0 `EastAsianWidth.txt`:
->
-> - Over U+2600–U+27BF, limner (at `51e3621`) agrees with your glibc output
->   on all 448 code points.
-> - UCD 17.0 disagrees with both on exactly 14 of them: the Yijing
->   trigrams and digrams (U+2630–2637, U+268A–268F), which became Wide in
->   Unicode 16. The block as a whole is 308 N, 80 A and 60 W.
->
-> So, as you say, it's a heterogeneous mix, and the "right" width also
-> depends on which Unicode version the terminal is using.
->
-> On `BreakIterator`, you're right too. Against `GraphemeBreakTest-17.0.0`,
-> JDK 21 passes 749 of 766 cases. All the emoji cases pass, but 16 of the
-> failures are Indic conjuncts (GB9c) and one is a ZWJ case, and the result
-> also depends on the JDK (which isn't necessarily the same under
-> babashka).
->
-> What I'm going to do rather than patch ranges:
->
-> - generate the width tables from a pinned UCD version;
-> - implement UAX #29 segmentation in portable Clojure, so the JVM and
->   babashka give identical answers;
-> - test against the official conformance files, with ICU4J as a
->   cross-check in the test suite.
->
-> I'll also open the clj-wcwidth issue you asked about, with the breakdown.
-> The scripts behind these numbers are in
-> `reviews/2026-09-15/evidence/` if you want to check them.
+- The reply on limner#2 was approved by the owner and posted on 2026-09-16:
+  https://github.com/tobiasosborne/limner/issues/2#issuecomment-5694586613
+- The clj-wcwidth issue below is drafted and **not posted**; it needs the
+  owner's approval of the exact text (CLAUDE.md Rule 14).
 
 ### Issue on pmonks/clj-wcwidth
 
-**Title:** `wide?` treats all of U+2600–U+27BF as wide; per UAX #11 most of
-the block is narrow
+**Title:** `wide?` treats all of U+2600–U+27BF as wide; per UAX #11 most of the block is narrow
 
-> In `src/wcwidth/api.clj` (at `2681e5a`), `wide?` includes
-> `(and (>= cp 0x2600) (<= cp 0x27BF))`.
->
-> In UCD 17.0.0 `EastAsianWidth.txt` those 448 code points are 308 N,
-> 80 A and 60 W. Only the 60 W are wide: for example ☔ U+2614, ⚡ U+26A1,
-> ✅ U+2705, ❌ U+274C, ✨ U+2728. Common symbols such as ✓ U+2713,
-> ✗ U+2717, ⚠ U+26A0, ❤ U+2764 and ☀ U+2600 are narrow, and glibc
-> `wcwidth` agrees (table in tobiasosborne/limner#2).
->
-> Note that glibc and UCD 17 differ on U+2630–2637 and U+268A–268F, which
-> became W in Unicode 16, so pinning a Unicode version matters.
->
-> Suggested fix: generate the wide ranges from `EastAsianWidth.txt` (W and
-> F) instead of the block range. I'm writing such a generator for limner
-> and would be happy to contribute it if useful.
+In `src/wcwidth/api.clj` (at d0d892d, line 211) `wide?` includes `(and (>= cp 0x2600) (<= cp 0x27BF))`, so every code point in Miscellaneous Symbols and Dingbats gets width 2.
+
+In UCD 17.0.0 `EastAsianWidth.txt` those 448 code points are 308 N, 80 A and 60 W. Only the 60 W are wide: for example ☔ U+2614, ☕ U+2615, ⚡ U+26A1, ✅ U+2705, ❌ U+274C, ✨ U+2728. Common symbols such as ✓ U+2713, ✗ U+2717, ⚠ U+26A0, ❤ U+2764 and ☀ U+2600 are N, and glibc `wcwidth` returns 1 for them (table in tobiasosborne/limner#2). Note that ⚠ and ❤ become width 2 only as emoji presentation sequences with VS16 (U+FE0F).
+
+The 60 W code points in the block, from that file, are: U+2614–2615, 2630–2637, 2648–2653, 267F, 268A–268F, 2693, 26A1, 26AA–26AB, 26BD–26BE, 26C4–26C5, 26CE, 26D4, 26EA, 26F2–26F3, 26F5, 26FA, 26FD, 2705, 270A–270B, 2728, 274C, 274E, 2753–2755, 2757, 2795–2797, 27B0, 27BF. Of these, U+2630–2637 and U+268A–268F became W in Unicode 16, so glibc (15.1 data) still reports 1 for them.
+
+If it is useful, the table generator limner uses to derive width from a pinned UCD version is in `scripts/gen-unicode-tables.clj`; I'd be happy to adapt it into a PR here.
