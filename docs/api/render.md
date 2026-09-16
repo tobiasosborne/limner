@@ -90,7 +90,13 @@ style map, and a wide cluster occupies a lead cell and a continuation cell.
 
 Creates a display cell from one grapheme cluster and a style map. `:width`
 comes from `limner.text`. There is no accumulated SGR string, so two cells
-with the same cluster and style compare equal.
+with the same cluster and style compare equal. Empty strings, multiple
+graphemes, zero-width structural content, and embedded controls throw
+`:limner.render/invalid-cell`.
+
+`set-cell` preserves the same invariant: a wide value creates its continuation,
+a narrow value clears any wide pair it overlaps, and a wide value at the right
+edge becomes a space.
 
 ### `empty-cell`
 `(empty-cell)`
@@ -130,7 +136,8 @@ When `render-frame` is called:
 1.  Content is written to a **back buffer**.
 2.  The back buffer is compared to the **front buffer** (what's currently on screen).
 3.  Only cells that differ by value are collected.
-4.  Contiguous dirty cells are grouped into regions without a quadratic scan.
+4.  The row-major dirty cells are grouped into regions in one linear pass,
+    without grouping or sorting.
 5.  Each region is emitted as a cursor move plus `limner.text/to-ansi` of its
     clusters, which emits only the SGR transitions that change and returns the
     style to default.

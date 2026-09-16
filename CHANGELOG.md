@@ -61,8 +61,11 @@ The following functions changed their error behaviour:
   grapheme-and-style cell model. `cell` now takes a cluster string and a style
   map; `parse-line-with-ansi` and `extract-ansi-state` are removed. A wide
   cluster is a lead cell plus a continuation cell, cells compare by value, and
-  `write-string-to-buffer` never splits a glyph at either edge. `limner.render`
-  is experimental; the changes are listed here so callers can migrate.
+  `write-string-to-buffer` never splits a glyph at either edge. `cell` rejects
+  values that are not one visible plain grapheme, `set-cell` maintains wide
+  continuations, and dirty-region grouping is a strict linear pass.
+  `limner.render` is experimental; the changes are listed here so callers can
+  migrate.
 
 ### Added
 

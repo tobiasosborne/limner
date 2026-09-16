@@ -2,10 +2,11 @@
   "Experimental render loop with diff-based updates and double buffering.
 
   Invalid buffer content throws `ex-info` with `:limner.render/invalid-string`,
-  `:limner.render/invalid-lines`, or `:limner.render/invalid-render-output`;
-  bad loop options throw `:limner.render/invalid-callback`. The render loop's
-  opt-in `:on-error` is the one documented error boundary: it reports the
-  error, keeps the last good frame, and never prints (ADR 0004)."
+  `:limner.render/invalid-cell`, `:limner.render/invalid-lines`, or
+  `:limner.render/invalid-render-output`; bad loop options throw
+  `:limner.render/invalid-callback`. The render loop's opt-in `:on-error` is the
+  one documented error boundary: it reports the error, keeps the last good
+  frame, and never prints (ADR 0004)."
   (:require [clojure.java.shell]
             [clojure.string :as str]
             [limner.ansi :as ansi]
@@ -21,6 +22,23 @@
                     {:limner/error :limner.render/invalid-string
                      :cluster cluster :type (type cluster)}))))
 
+(defn- invalid-cell! [cluster]
+  (throw (ex-info "A display cell must contain exactly one positive-width grapheme cluster"
+                  {:limner/error :limner.render/invalid-cell
+                   :cluster cluster
+                   :limner/hint "Pass one plain grapheme; write strings through write-string-to-buffer"})))
+
+(defn- display-unit [cluster]
+  (ensure-cluster cluster)
+  (let [units (text/clusters cluster)
+        unit (first units)]
+    (when-not (and (= 1 (count units))
+                   (= cluster (:cluster unit))
+                   (#{1 2} (:width unit))
+                   (empty? (:raw unit)))
+      (invalid-cell! cluster))
+    unit))
+
 (defn cell
   "Create a display cell from one grapheme cluster and a style map.
 
@@ -28,10 +46,10 @@
   string. `:width` comes from `limner.text` (ADR 0005)."
   ([cluster] (cell cluster {}))
   ([cluster style-map]
-   (ensure-cluster cluster)
-   {:cluster cluster
-    :style (style/normalize-style (or style-map {}))
-    :width (text/width cluster)}))
+   (let [{:keys [width]} (display-unit cluster)]
+     {:cluster cluster
+      :style (style/normalize-style (or style-map {}))
+      :width width})))
 
 (defn empty-cell
   "Create an empty (space) cell."
@@ -71,15 +89,34 @@
              (>= x 0) (< x (:width buffer)))
     (get-in buffer [:cells y x])))
 
-(defn set-cell
-  "Set one grid cell at (x, y).
+(declare put-cell)
 
-  This is a low-level setter: it does not maintain wide-cluster
-  continuations. Use `write-string-to-buffer` for grapheme-safe writes."
-  [buffer x y cell]
+(defn- canonical-cell [candidate]
+  (when-not (and (map? candidate)
+                 (string? (:cluster candidate))
+                 (map? (:style candidate))
+                 (contains? candidate :width))
+    (invalid-cell! (:cluster candidate)))
+  (let [canonical (cell (:cluster candidate) (:style candidate))]
+    (when-not (= (:width canonical) (:width candidate))
+      (invalid-cell! (:cluster candidate)))
+    canonical))
+
+(defn set-cell
+  "Set one display cell at (x, y) while preserving wide-cell invariants.
+
+  A wide cell creates its continuation; placing it at the right edge writes a
+  space. A narrow cell clears any wide pair it overlaps. Out-of-bounds writes
+  are no-ops."
+  [buffer x y candidate]
   (if (and (>= y 0) (< y (:height buffer))
            (>= x 0) (< x (:width buffer)))
-    (assoc-in buffer [:cells y x] cell)
+    (let [candidate (canonical-cell candidate)
+          row (get-in buffer [:cells y])
+          row (if (and (wide? candidate) (= x (dec (:width buffer))))
+                (put-cell row x (empty-cell))
+                (put-cell row x candidate))]
+      (assoc-in buffer [:cells y] row))
     buffer))
 
 (defn clear-buffer
@@ -104,7 +141,8 @@
   (cond
     (or (neg? x) (>= x (count row))) row
     (continuation? (nth row x)) (-> row (assoc x (empty-cell)) (assoc (dec x) (empty-cell)))
-    (wide? (nth row x)) (-> row (assoc x (empty-cell)) (assoc (inc x) (empty-cell)))
+    (wide? (nth row x)) (cond-> (assoc row x (empty-cell))
+                          (< (inc x) (count row)) (assoc (inc x) (empty-cell)))
     :else row))
 
 (defn- put-cell
@@ -132,15 +170,28 @@
         (recur (rest remaining)
                (let [lead (if (and (pos? cx) (continuation? (get-cell buffer (dec cx) y)))
                             (- cx 2) (dec cx))]
-                 (if (<= 0 lead)
+                 (if (and (<= 0 y) (< y (:height buffer))
+                          (<= 0 lead) (< lead (:width buffer)))
                    (update-in buffer [:cells y lead :cluster] str cluster)
                    buffer))
                cx)
 
         (= 2 width)
-        (if (< (inc cx) (:width buffer))
+        (cond
+          (< cx -1)
+          (recur (rest remaining) buffer (+ cx 2))
+
+          (= cx -1)
+          (recur (rest remaining) (put-row-cell buffer 0 y (empty-cell)) (+ cx 2))
+
+          (< (inc cx) (:width buffer))
           (recur (rest remaining) (put-row-cell buffer cx y (cell cluster style)) (+ cx 2))
-          (recur (rest remaining) (put-row-cell buffer cx y (empty-cell)) (inc cx)))
+
+          (< cx (:width buffer))
+          (recur (rest remaining) (put-row-cell buffer cx y (empty-cell)) (inc cx))
+
+          :else
+          (recur (rest remaining) buffer (+ cx 2)))
 
         :else
         (recur (rest remaining) (put-row-cell buffer cx y (cell cluster style)) (inc cx)))
@@ -200,34 +251,24 @@
         :when (not (cells-equal? old-cell new-cell))]
     [x y new-cell]))
 
-(defn- ascending-x? [cells]
-  (every? (fn [[[x1] [x2]]] (< x1 x2))
-          (partition 2 1 (map (fn [cell] [(first cell)]) cells))))
-
-(defn- regions-for-row [y cells]
-  (let [ordered (if (ascending-x? cells) cells (sort-by first cells))]
-    (loop [remaining ordered, region nil, regions []]
-      (if-let [[x _ c] (first remaining)]
-        (if (and region (= (inc (:x-end region)) x))
-          (recur (rest remaining)
-                 (-> region (update :cells conj c) (assoc :x-end x))
-                 regions)
-          (recur (rest remaining)
-                 {:y y :x x :cells [c] :x-end x}
-                 (cond-> regions region (conj (dissoc region :x-end)))))
-        (cond-> regions region (conj (dissoc region :x-end)))))))
-
 (defn find-dirty-regions
   "Group dirty cells into contiguous horizontal regions.
 
-  One grouping pass plus a per-row scan; there is no per-cell search of the
-  row, so the old quadratic `.indexOf` path is gone. Returns a sequence of
-  `{:y row :x start-col :cells [cell ...]}`."
+  The row-major sequence from `find-dirty-cells` is consumed in one linear
+  pass, without grouping or sorting. Arbitrarily ordered input remains correct
+  but starts a new region whenever the next item is not the next column in the
+  same row. Returns `{:y row :x start-col :cells [cell ...]}` maps."
   [dirty-cells]
-  (->> dirty-cells
-       (group-by second)
-       (sort-by key)
-       (mapcat (fn [[y row-cells]] (regions-for-row y row-cells)))))
+  (loop [remaining (seq dirty-cells), region nil, regions []]
+    (if-let [[x y c] (first remaining)]
+      (if (and region (= y (:y region)) (= x (inc (:x-end region))))
+        (recur (next remaining)
+               (-> region (update :cells conj c) (assoc :x-end x))
+               regions)
+        (recur (next remaining)
+               {:y y :x x :x-end x :cells [c]}
+               (cond-> regions region (conj (dissoc region :x-end)))))
+      (cond-> regions region (conj (dissoc region :x-end))))))
 
 (defn move-cursor
   "Generate ANSI code to move cursor to position (x, y)

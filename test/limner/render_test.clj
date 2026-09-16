@@ -54,6 +54,17 @@
     (is (= {} (:style e)))
     (is (= 1 (:width e)))))
 
+(deftest test-cell-requires-one-visible-grapheme
+  (doseq [cluster ["" "ab" "\u001B[31mA" "\u200B"]]
+    (let [data (try
+                 (render/cell cluster)
+                 nil
+                 (catch clojure.lang.ExceptionInfo e (ex-data e)))]
+      (is (= :limner.render/invalid-cell (:limner/error data)))
+      (is (= cluster (:cluster data)))))
+  (is (= {:cluster "e\u0301" :style {} :width 1}
+         (render/cell "e\u0301"))))
+
 (deftest test-buffer-creation-and-bounds
   (let [buf (render/create-buffer 4 2)]
     (is (= 4 (:width buf)))
@@ -64,6 +75,15 @@
     (is (nil? (render/get-cell buf 4 1)))
     (is (nil? (render/get-cell buf -1 0)))
     (is (= buf (render/set-cell buf 99 99 (render/cell "x"))))))
+
+(deftest test-set-cell-maintains-wide-cell-invariants
+  (let [empty (render/create-buffer 3 1)
+        wide (render/set-cell empty 0 0 (render/cell "😀"))]
+    (is (= ["😀" "" " "] (mapv :cluster (first (:cells wide)))))
+    (is (= [" " "X" " "]
+           (mapv :cluster
+                 (first (:cells (render/set-cell wide 1 0 (render/cell "X")))))))
+    (is (= empty (render/set-cell empty 2 0 (render/cell "😀"))))))
 
 (deftest test-write-string-plain-and-styled
   (testing "plain text occupies one column per grapheme"
@@ -112,6 +132,18 @@
     (is (= " " (:cluster (render/get-cell buf 2 0))))
     (is (not (render/wide? (render/get-cell buf 2 0))))))
 
+(deftest test-wide-cluster-crossing-left-edge-clears-visible-half
+  (let [buf (-> (render/create-buffer 3 1)
+                (render/write-string-to-buffer 0 0 "abc")
+                (render/write-string-to-buffer -1 0 "😀X"))]
+    (is (= [" " "X" "c"] (mapv :cluster (first (:cells buf)))))))
+
+(deftest test-zero-width-write-outside-buffer-is-a-no-op
+  (let [buf (render/create-buffer 3 1)
+        zero-width (render/create-buffer 0 1)]
+    (is (= buf (render/write-string-to-buffer buf 1 2 "\u200B")))
+    (is (= zero-width (render/write-string-to-buffer zero-width 1 0 "\u200B")))))
+
 (deftest test-zero-width-attaches-to-preceding-cluster
   ;; "e" + COMBINING ACUTE ACCENT is one cluster.
   (let [buf (render/write-string-to-buffer (render/create-buffer 4 1) 0 0 "ae\u0301b")]
@@ -145,7 +177,20 @@
     (is (= 2 (count regions))))
   (testing "a large contiguous row is one region without a quadratic scan"
     (let [dirty (mapv (fn [x] [x 0 (render/cell "x")]) (range 5000))]
-      (is (= 1 (count (render/find-dirty-regions dirty)))))))
+      (is (= 1 (count (render/find-dirty-regions dirty))))))
+  (testing "the row-major grouping path is one pass and never sorts"
+    (let [dirty [[0 0 (render/cell "A")]
+                 [1 0 (render/cell "B")]
+                 [3 0 (render/cell "C")]
+                 [0 1 (render/cell "D")]]
+          regions (with-redefs [clojure.core/sort-by
+                                (fn [& _]
+                                  (throw (ex-info "find-dirty-regions sorted" {})))]
+                    (vec (render/find-dirty-regions dirty)))]
+      (is (= [{:y 0 :x 0 :cells [(render/cell "A") (render/cell "B")]}
+              {:y 0 :x 3 :cells [(render/cell "C")]}
+              {:y 1 :x 0 :cells [(render/cell "D")]}]
+             regions)))))
 
 (deftest test-buffer-stats
   (let [buf (render/write-string-to-buffer (render/create-buffer 4 1) 0 0 "ab")

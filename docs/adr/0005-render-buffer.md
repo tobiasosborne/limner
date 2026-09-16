@@ -39,6 +39,11 @@ A wide cluster occupies two grid cells: the lead cell holds the cluster with
 and `:width 0` that renders nothing. A continuation can never hold text of
 its own.
 
+The public `cell` constructor accepts exactly one positive-width plain
+grapheme. `set-cell` canonicalises that value and maintains the continuation
+invariant; a wide cell at the right edge becomes a space. Continuation markers
+are created only by the buffer writer.
+
 Zero-width content attaches to the preceding cluster, as ADR 0002
 segmentation guarantees; a leading zero-width cluster attaches to the
 following cluster. A cell never holds a lone surrogate because the text
@@ -65,10 +70,11 @@ The screen never shows half a glyph:
 
 ### Diffs and rendering
 
-`find-dirty-cells` compares cells by value. `find-dirty-regions` groups the
-cells per row and merges horizontally adjacent columns in one pass per row;
-it never searches the row for each cell, so the quadratic `.indexOf` scan is
-gone.
+`find-dirty-cells` compares cells by value and returns row-major coordinates.
+`find-dirty-regions` consumes that sequence in one linear pass, merging
+horizontally adjacent columns without grouping, sorting, or searching the row
+for each cell. Arbitrarily ordered direct input remains correct but may produce
+more regions.
 
 Rendering emits, per region, a cursor-position sequence followed by the
 region's clusters rendered through `limner.text/to-ansi`. That function

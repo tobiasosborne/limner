@@ -138,6 +138,7 @@ caller believes an option is in effect that is not, so those throw.
 | `:limner.layout/empty-components` | `limner.layout/stack`, `hsplit`, `grid` | component collection is empty |
 | `:limner.layout/invalid-grid` | `limner.layout/grid` | `:columns`/`:rows` missing or not positive integers |
 | `:limner.render/invalid-string` | `limner.render/write-string-to-buffer`, `cell` | content is not a string |
+| `:limner.render/invalid-cell` | `limner.render/cell`, `set-cell` | a cell is not exactly one positive-width plain grapheme with canonical width |
 | `:limner.render/invalid-lines` | `limner.render/write-lines-to-buffer`, `render-frame`, `force-render` | lines are not sequential, or a line is not a string/styled value |
 | `:limner.render/invalid-render-output` | `limner.render/validate-render-output` | `render-fn` did not return a sequence of strings |
 | `:limner.render/invalid-callback` | `limner.render/create-render-loop` | `:render-fn`, `:on-frame`, or `:on-error` is not a function |
