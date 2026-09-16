@@ -9,36 +9,73 @@
   (:require [clojure.java.shell]
             [clojure.string :as str]
             [limner.ansi :as ansi]
-            [limner.core :as core]))
+            [limner.core :as core]
+            [limner.text :as text]
+            [limner.text.style :as style]))
 
 ;; ────────────────────── Screen Buffer ──────────────────────
 
+(defn- ensure-cluster [cluster]
+  (when-not (string? cluster)
+    (throw (ex-info (str "Cell cluster must be a string: " (pr-str cluster))
+                    {:limner/error :limner.render/invalid-string
+                     :cluster cluster :type (type cluster)}))))
+
 (defn cell
-  "Create a cell with character and ANSI codes"
-  [char ansi-codes]
-  {:char char :ansi ansi-codes})
+  "Create a display cell from one grapheme cluster and a style map.
+
+  The cell stores the ADR 0003 style as a value; it never accumulates an SGR
+  string. `:width` comes from `limner.text` (ADR 0005)."
+  ([cluster] (cell cluster {}))
+  ([cluster style-map]
+   (ensure-cluster cluster)
+   {:cluster cluster
+    :style (style/normalize-style (or style-map {}))
+    :width (text/width cluster)}))
 
 (defn empty-cell
-  "Create an empty cell (space with no formatting)"
+  "Create an empty (space) cell."
   []
-  (cell \space ""))
+  {:cluster " " :style {} :width 1})
+
+(defn continuation-cell
+  "Create the second cell of a wide cluster; it renders nothing."
+  []
+  {:cluster "" :style {} :width 0})
+
+(defn continuation?
+  "True when this cell is the continuation half of a wide cluster."
+  [c]
+  (= "" (:cluster c)))
+
+(defn wide?
+  "True when this cell leads a wide (two-column) cluster."
+  [c]
+  (= 2 (:width c)))
 
 (defn create-buffer
-  "Create an empty screen buffer of given dimensions"
+  "Create an empty screen buffer of the given dimensions."
   [width height]
+  (when-not (and (integer? width) (<= 0 width) (integer? height) (<= 0 height))
+    (throw (ex-info "Buffer dimensions must be non-negative integers"
+                    {:limner/error :limner.render/invalid-dimension
+                     :width width :height height})))
   {:width width
    :height height
    :cells (vec (repeat height (vec (repeat width (empty-cell)))))})
 
 (defn get-cell
-  "Get cell at position (x, y) in buffer"
+  "Get the cell at (x, y), or nil when out of bounds."
   [buffer x y]
   (when (and (>= y 0) (< y (:height buffer))
              (>= x 0) (< x (:width buffer)))
     (get-in buffer [:cells y x])))
 
 (defn set-cell
-  "Set cell at position (x, y) in buffer"
+  "Set one grid cell at (x, y).
+
+  This is a low-level setter: it does not maintain wide-cluster
+  continuations. Use `write-string-to-buffer` for grapheme-safe writes."
   [buffer x y cell]
   (if (and (>= y 0) (< y (:height buffer))
            (>= x 0) (< x (:width buffer)))
@@ -46,95 +83,105 @@
     buffer))
 
 (defn clear-buffer
-  "Clear buffer by filling with empty cells"
+  "Clear buffer by filling with empty cells."
   [buffer]
   (assoc buffer :cells
-    (vec (repeat (:height buffer)
-                 (vec (repeat (:width buffer) (empty-cell)))))))
+         (vec (repeat (:height buffer)
+                      (vec (repeat (:width buffer) (empty-cell)))))))
 
-;; ────────────────────── ANSI Code Extraction ──────────────────────
-
-(defn extract-ansi-state
-  "Extract accumulated SGR tokens from a string."
-  [s]
-  (->> (ansi/tokenize s)
-       (keep (fn [{:keys [type final raw]}]
-               (when (and (= :csi type) (= \m final)) raw)))
-       (str/join)))
+;; ────────────────────── ANSI Helpers ──────────────────────
 
 (defn strip-ansi
   "Remove ECMA-48 controls from a string."
   [s]
   (ansi/strip s))
 
-(defn- append-text-cells [cells ^String text current-ansi]
-  (loop [index 0, cells cells]
-    (if (= index (.length text))
-      cells
-      (recur (inc index)
-             (conj! cells (cell (.charAt text index) current-ansi))))))
-
-(defn parse-line-with-ansi
-  "Parse a line with ANSI codes into a sequence of cells
-   Returns vector of {:char c :ansi \"codes\"}"
-  [line]
-  (let [{:keys [cells]}
-        (reduce (fn [{:keys [cells current-ansi] :as state}
-                     {:keys [type final raw text]}]
-                  (cond
-                    (and (= :csi type) (= \m final))
-                    (assoc state :current-ansi (str current-ansi raw))
-
-                    (= :text type)
-                    (assoc state :cells
-                           (append-text-cells cells text current-ansi))
-
-                    :else state))
-                {:cells (transient []) :current-ansi ""}
-                (ansi/tokenize line))]
-    (persistent! cells)))
-
 ;; ────────────────────── Buffer Writing ──────────────────────
 
+(defn- clear-run
+  "Clear the wide pair touching column x in a row, if any."
+  [row x]
+  (cond
+    (or (neg? x) (>= x (count row))) row
+    (continuation? (nth row x)) (-> row (assoc x (empty-cell)) (assoc (dec x) (empty-cell)))
+    (wide? (nth row x)) (-> row (assoc x (empty-cell)) (assoc (inc x) (empty-cell)))
+    :else row))
+
+(defn- put-cell
+  "Place `c` at column x, clearing any wide cluster it touches."
+  [row x c]
+  (let [row (clear-run row x)]
+    (if (wide? c)
+      (-> (clear-run row (inc x))
+          (assoc x c)
+          (assoc (inc x) (continuation-cell)))
+      (assoc row x c))))
+
+(defn- put-row-cell [buffer x y c]
+  (if (and (<= 0 y) (< y (:height buffer)) (<= 0 x) (< x (:width buffer)))
+    (assoc-in buffer [:cells y] (put-cell (get-in buffer [:cells y]) x c))
+    buffer))
+
+(defn- write-units [buffer x y units]
+  (loop [remaining units, buffer buffer, cx x]
+    (if-let [{:keys [cluster width style]} (first remaining)]
+      (cond
+        (zero? width)
+        ;; Zero-width content attaches to the preceding cluster, or to the
+        ;; following cluster when it leads the line.
+        (recur (rest remaining)
+               (let [lead (if (and (pos? cx) (continuation? (get-cell buffer (dec cx) y)))
+                            (- cx 2) (dec cx))]
+                 (if (<= 0 lead)
+                   (update-in buffer [:cells y lead :cluster] str cluster)
+                   buffer))
+               cx)
+
+        (= 2 width)
+        (if (< (inc cx) (:width buffer))
+          (recur (rest remaining) (put-row-cell buffer cx y (cell cluster style)) (+ cx 2))
+          (recur (rest remaining) (put-row-cell buffer cx y (empty-cell)) (inc cx)))
+
+        :else
+        (recur (rest remaining) (put-row-cell buffer cx y (cell cluster style)) (inc cx)))
+      buffer)))
+
 (defn write-string-to-buffer
-  "Write a string (with ANSI codes) to buffer at position (x, y)"
+  "Write an ANSI string or styled value to the buffer at (x, y).
+
+  Parsing, segmentation and width come from `limner.text/clusters`; a wide
+  cluster occupies a lead cell and a continuation cell (ADR 0005)."
   [buffer x y s]
-  (when-not (string? s)
-    (throw (ex-info (str "Expected string but got " (type s) ": " (pr-str s))
+  (when-not (or (string? s) (vector? s))
+    (throw (ex-info (str "Expected string or styled text but got " (type s) ": " (pr-str s))
                     {:limner/error :limner.render/invalid-string
                      :type (type s) :value s})))
-  (let [cells (parse-line-with-ansi s)]
-    (reduce
-      (fn [buf [idx cell]]
-        (set-cell buf (+ x idx) y cell))
-      buffer
-      (map-indexed vector cells))))
+  (write-units buffer x y (text/clusters s)))
 
 (defn write-lines-to-buffer
-  "Write multiple lines to buffer starting at (x, y)
-   lines: must be a collection of strings"
+  "Write multiple lines to buffer starting at (x, y).
+   lines: a collection of strings or styled-text values."
   [buffer x y lines]
   (reduce
-    (fn [buf [line-idx line]]
-      (when-not (string? line)
-        (throw (ex-info (str "Line " line-idx " is not a string: " (type line) " = " (pr-str line))
-                        {:limner/error :limner.render/invalid-lines
-                         :line-idx line-idx :type (type line) :value line})))
-      (write-string-to-buffer buf x (+ y line-idx) line))
-    buffer
-    (map-indexed vector lines)))
+   (fn [buf [line-idx line]]
+     (when-not (or (string? line) (vector? line))
+       (throw (ex-info (str "Line " line-idx " is not a string: " (type line) " = " (pr-str line))
+                       {:limner/error :limner.render/invalid-lines
+                        :line-idx line-idx :type (type line) :value line})))
+     (write-string-to-buffer buf x (+ y line-idx) line))
+   buffer
+   (map-indexed vector lines)))
 
 ;; ────────────────────── Diff & Render ──────────────────────
 
 (defn cells-equal?
-  "Check if two cells are equal"
+  "Check if two cells are equal by value (ADR 0005)."
   [cell1 cell2]
-  (and (= (:char cell1) (:char cell2))
-       (= (:ansi cell1) (:ansi cell2))))
+  (= cell1 cell2))
 
 (defn find-dirty-cells
-  "Find all cells that differ between old and new buffers
-   Returns sequence of [x y cell]"
+  "Find all cells that differ between old and new buffers.
+   Returns a row-major sequence of [x y cell]."
   [old-buffer new-buffer]
   (for [y (range (:height new-buffer))
         x (range (:width new-buffer))
@@ -143,24 +190,34 @@
         :when (not (cells-equal? old-cell new-cell))]
     [x y new-cell]))
 
+(defn- ascending-x? [cells]
+  (every? (fn [[[x1] [x2]]] (< x1 x2))
+          (partition 2 1 (map (fn [cell] [(first cell)]) cells))))
+
+(defn- regions-for-row [y cells]
+  (let [ordered (if (ascending-x? cells) cells (sort-by first cells))]
+    (loop [remaining ordered, region nil, regions []]
+      (if-let [[x _ c] (first remaining)]
+        (if (and region (= (inc (:x-end region)) x))
+          (recur (rest remaining)
+                 (-> region (update :cells conj c) (assoc :x-end x))
+                 regions)
+          (recur (rest remaining)
+                 {:y y :x x :cells [c] :x-end x}
+                 (cond-> regions region (conj (dissoc region :x-end)))))
+        (cond-> regions region (conj (dissoc region :x-end)))))))
+
 (defn find-dirty-regions
-  "Group dirty cells into contiguous horizontal regions
-   Returns sequence of {:y row :x start-col :cells [cell...]}
-   This is more efficient than updating individual cells"
+  "Group dirty cells into contiguous horizontal regions.
+
+  One grouping pass plus a per-row scan; there is no per-cell search of the
+  row, so the old quadratic `.indexOf` path is gone. Returns a sequence of
+  `{:y row :x start-col :cells [cell ...]}`."
   [dirty-cells]
-  (let [by-row (group-by second dirty-cells)]
-    (for [[y row-cells] (sort-by key by-row)
-          :let [sorted-cells (sort-by first row-cells)]
-          region (partition-by
-                   (fn [[x _ _]]
-                     ;; Group consecutive x positions together
-                     (- x (.indexOf (map first sorted-cells) x)))
-                   sorted-cells)]
-      (let [cells (vec region)
-            start-x (first (first cells))]
-        {:y y
-         :x start-x
-         :cells (mapv #(nth % 2) cells)}))))
+  (->> dirty-cells
+       (group-by second)
+       (sort-by key)
+       (mapcat (fn [[y row-cells]] (regions-for-row y row-cells)))))
 
 (defn move-cursor
   "Generate ANSI code to move cursor to position (x, y)
@@ -169,16 +226,25 @@
   (str "\u001B[" (inc y) ";" (inc x) "H"))
 
 (defn render-cell
-  "Render a single cell to a string with ANSI codes"
-  [cell]
-  (str (:ansi cell) (:char cell)))
+  "Render a single cell's cluster and style; a continuation renders nothing."
+  [c]
+  (if (continuation? c)
+    ""
+    (text/to-ansi [{:text (:cluster c) :style (:style c)}])))
 
 (defn render-region
-  "Render a dirty region to the terminal"
+  "Render a dirty region with minimal SGR transitions.
+
+  `limner.text/to-ansi` emits only the style changes and returns the SGR state
+  to default, so no cell stores an escape string and no region leaks style."
   [{:keys [x y cells]}]
-  (str (move-cursor x y)
-       (str/join (map render-cell cells))
-       "\u001B[0m")) ; Reset ANSI codes after region
+  (let [styled (reduce (fn [spans c]
+                         (if (continuation? c)
+                           spans
+                           (conj spans {:text (:cluster c) :style (:style c)})))
+                       [] cells)]
+    (str (move-cursor x y)
+         (text/to-ansi styled))))
 
 (defn render-dirty-regions
   "Render all dirty regions to terminal without flushing"
@@ -187,10 +253,15 @@
     (print (render-region region))))
 
 (defn apply-diff
-  "Find differences between buffers and render only changed regions"
+  "Find differences between buffers and render only changed regions.
+
+  Returns the number of regions rendered."
   [old-buffer new-buffer]
   (let [dirty-cells (find-dirty-cells old-buffer new-buffer)
-        regions (find-dirty-regions dirty-cells)]
+        regions (->> dirty-cells
+                     find-dirty-regions
+                     (filter (fn [region]
+                               (some (complement continuation?) (:cells region)))))]
     (when (seq regions)
       (render-dirty-regions regions)
       (flush))
@@ -615,13 +686,16 @@
 ;; ────────────────────── Statistics & Debugging ──────────────────────
 
 (defn buffer-stats
-  "Get statistics about a buffer"
+  "Get statistics about a buffer.
+
+  A cell is non-empty when its cluster is not a space; continuation cells of a
+  wide cluster are not counted."
   [buffer]
   {:width (:width buffer)
    :height (:height buffer)
    :total-cells (* (:width buffer) (:height buffer))
-   :non-empty-cells (count (filter #(not= (:char %) \space)
-                                  (apply concat (:cells buffer))))})
+   :non-empty-cells (count (filter #(not= " " (:cluster %))
+                                   (apply concat (:cells buffer))))})
 
 (defn render-stats
   "Get detailed render state statistics"

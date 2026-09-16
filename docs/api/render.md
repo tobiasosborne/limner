@@ -26,7 +26,8 @@ Starts a background thread (via `future`) that continuously renders the applicat
   - `:fps`: Target frames per second (default 60).
   - `:on-frame`: Optional callback `(fn [render-state])` called after each loop
     iteration.
-  - `:on-error`: Optional error handler `(fn [exception])`.
+  - `:on-error`: Optional error boundary `(fn [exception])`. The loop keeps
+    its last good frame, calls this callback, and does not print (ADR 0004).
 
 **Returns:**
 A map containing control functions:
@@ -80,7 +81,21 @@ Clears the terminal and moves the cursor to (0,0).
 
 ## Buffer Operations
 
-Lower-level functions for manipulating screen buffers directly.
+Lower-level functions for manipulating screen buffers directly. The cell
+model is fixed by ADR 0005: a cell is one grapheme cluster plus its ADR 0003
+style map, and a wide cluster occupies a lead cell and a continuation cell.
+
+### `cell`
+`(cell cluster style-map)`
+
+Creates a display cell from one grapheme cluster and a style map. `:width`
+comes from `limner.text`. There is no accumulated SGR string, so two cells
+with the same cluster and style compare equal.
+
+### `empty-cell`
+`(empty-cell)`
+
+Creates a space cell.
 
 ### `create-buffer`
 `(create-buffer width height)`
@@ -90,27 +105,42 @@ Creates an empty screen buffer.
 ### `write-string-to-buffer`
 `(write-string-to-buffer buffer x y s)`
 
-Writes a string into the buffer at the specified position. ECMA-48 controls do
-not become cells; SGR tokens are accumulated in the existing `:ansi` cell
-field. Each UTF-16 code unit still becomes one cell, so non-BMP characters are
-not represented correctly until the render cell-model work in PLAN 2.2.
+Writes an ANSI string or styled value into the buffer at the specified
+position. Parsing, segmentation and width come from `limner.text/clusters`,
+so a non-BMP emoji is one lead cell plus a continuation, never two surrogate
+halves. A write that starts inside a wide cell replaces it with spaces, and a
+write that would leave half a wide cluster at the right edge writes a space
+instead.
+
+### `write-lines-to-buffer`
+`(write-lines-to-buffer buffer x y lines)`
+
+Writes several lines starting at `(x, y)`. A non-string, non-styled line
+throws `ex-info` with `:limner.render/invalid-lines`.
 
 ## Rendering Internals
 
-The renderer emits only regions containing changed cells, but finding those
-cells scans the complete new buffer on every diff.
+The renderer emits only regions containing changed cells.
 
 ### Diff Algorithm
 When `render-frame` is called:
 1.  Content is written to a **back buffer**.
 2.  The back buffer is compared to the **front buffer** (what's currently on screen).
-3.  Only cells that differ are collected.
-4.  Contiguous dirty cells are grouped into regions.
-5.  Only these regions are printed to the terminal.
+3.  Only cells that differ by value are collected.
+4.  Contiguous dirty cells are grouped into regions without a quadratic scan.
+5.  Each region is emitted as a cursor move plus `limner.text/to-ansi` of its
+    clusters, which emits only the SGR transitions that change and returns the
+    style to default.
 6.  Buffers are swapped.
 
 Terminal output scales with the dirty regions; diff calculation scales with
 the buffer size.
+
+Golden tests feed the emitted bytes through the test-only virtual terminal in
+`test/limner/vt.clj` and compare the resulting `{:cluster :style}` grid, so
+they do not depend on escape-sequence spelling. Property tests confirm that a
+sequence of diffs reaches the same grid as a full redraw and that no cell
+holds half a wide cluster.
 
 ### `render-stats`
 `(render-stats state)`

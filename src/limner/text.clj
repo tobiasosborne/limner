@@ -44,6 +44,14 @@
   ([input] (columns/default-width input))
   ([input options] (columns/width input options)))
 
+(defn clusters
+  "Return one map per grapheme unit: `{:cluster :style :width :raw}`.
+
+  The render buffer uses this to place graphemes on a column grid without any
+  UTF-16 arithmetic. Options support `:ambiguous-width` 1 or 2."
+  ([input] (columns/clusters input {}))
+  ([input options] (columns/clusters input options)))
+
 (defn slice-columns
   "Return columns `[start,end)`. Partial wide clusters become styled spaces."
   ([input start end] (columns/slice-columns input start end {}))

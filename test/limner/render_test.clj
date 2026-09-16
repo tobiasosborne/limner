@@ -1,453 +1,323 @@
 (ns limner.render-test
-  (:require [clojure.test :refer [deftest is testing]]
-            [limner.render :as render]))
+  "Golden, direct-byte and property tests for the ADR 0005 render buffer.
 
-;; ──────────────────────── Cell Tests ──────────────────────
+  Golden tests feed the emitted byte stream through a test-only virtual
+  terminal (`limner.vt`) and compare the resulting `{:cluster :style}` grid,
+  so they do not depend on escape-sequence spelling."
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
+            [limner.render :as render]
+            [limner.text :as text]
+            [limner.unicode.grapheme :as grapheme]
+            [limner.vt :as vt]))
 
-(deftest test-cell-creation
-  (testing "Cell with character and ANSI codes"
-    (let [c (render/cell \A "\u001B[31m")]
-      (is (= \A (:char c)))
-      (is (= "\u001B[31m" (:ansi c)))))
+;; ──────────────────────── REVIEW probes ──────────────────────
 
-  (testing "Empty cell"
-    (let [c (render/empty-cell)]
-      (is (= \space (:char c)))
-      (is (= "" (:ansi c))))))
+(deftest probe-6-emoji-is-one-grapheme-cell
+  (testing "REVIEW probe 6: one emoji is one cluster, not two surrogate halves"
+    (let [units (text/clusters "😀")]
+      (is (= 1 (count units)))
+      (is (= "😀" (:cluster (first units))))
+      (is (= 2 (:width (first units))))))
+  (testing "a wide grapheme occupies a lead cell and a continuation cell"
+    (let [buf (render/write-string-to-buffer (render/create-buffer 4 1) 0 0 "😀")
+          cells (:cells buf)]
+      (is (= "😀" (:cluster (render/get-cell buf 0 0))))
+      (is (render/wide? (render/get-cell buf 0 0)))
+      (is (render/continuation? (render/get-cell buf 1 0)))
+      (is (= 4 (count (first cells)))))))
 
-;; ──────────────────────── Buffer Tests ──────────────────────
+(deftest probe-6c-style-is-a-value
+  (testing "REVIEW probe 6c: reset does not accumulate in a cell style"
+    (let [units (text/clusters (str "\u001B[31mA" "\u001B[0mB"))]
+      (is (= [{:fg :red} {}] (mapv :style units)))
+      (is (not= (:style (first units)) (:style (second units))))))
+  (testing "visually identical cells compare equal"
+    (let [a (render/cell "x" {:fg :red})
+          b (render/cell "x" {:fg :red})
+          c (render/cell "x" {:fg :red :bold true})]
+      (is (= a b))
+      (is (not= a c)))))
 
-(deftest test-buffer-creation
-  (testing "Create buffer with dimensions"
-    (let [buf (render/create-buffer 10 5)]
-      (is (= 10 (:width buf)))
-      (is (= 5 (:height buf)))
-      (is (= 5 (count (:cells buf))))
-      (is (= 10 (count (first (:cells buf)))))))
+;; ──────────────────────── Cell and buffer basics ──────────────────────
 
-  (testing "Buffer cells are initially empty"
-    (let [buf (render/create-buffer 10 5)
-          first-cell (render/get-cell buf 0 0)]
-      (is (= \space (:char first-cell)))
-      (is (= "" (:ansi first-cell))))))
+(deftest test-cell-and-empty-cell
+  (let [c (render/cell "A" {:fg :red :bold true})]
+    (is (= "A" (:cluster c)))
+    (is (= {:fg :red :bold true} (:style c)))
+    (is (= 1 (:width c))))
+  (let [e (render/empty-cell)]
+    (is (= " " (:cluster e)))
+    (is (= {} (:style e)))
+    (is (= 1 (:width e)))))
 
-(deftest test-buffer-get-set
-  (testing "Get and set cells"
-    (let [buf (render/create-buffer 10 5)
-          cell (render/cell \X "\u001B[32m")
-          buf2 (render/set-cell buf 3 2 cell)
-          retrieved (render/get-cell buf2 3 2)]
-      (is (= \X (:char retrieved)))
-      (is (= "\u001B[32m" (:ansi retrieved)))))
+(deftest test-buffer-creation-and-bounds
+  (let [buf (render/create-buffer 4 2)]
+    (is (= 4 (:width buf)))
+    (is (= 2 (:height buf)))
+    (is (= 2 (count (:cells buf))))
+    (is (= 4 (count (first (:cells buf)))))
+    (is (= (render/empty-cell) (render/get-cell buf 3 1)))
+    (is (nil? (render/get-cell buf 4 1)))
+    (is (nil? (render/get-cell buf -1 0)))
+    (is (= buf (render/set-cell buf 99 99 (render/cell "x"))))))
 
-  (testing "Get cell out of bounds returns nil"
-    (let [buf (render/create-buffer 10 5)]
-      (is (nil? (render/get-cell buf 20 2)))
-      (is (nil? (render/get-cell buf 5 10)))
-      (is (nil? (render/get-cell buf -1 2)))))
+(deftest test-write-string-plain-and-styled
+  (testing "plain text occupies one column per grapheme"
+    (let [buf (render/write-string-to-buffer (render/create-buffer 5 1) 0 0 "hi")]
+      (is (= "h" (:cluster (render/get-cell buf 0 0))))
+      (is (= "i" (:cluster (render/get-cell buf 1 0))))
+      (is (= " " (:cluster (render/get-cell buf 2 0))))))
+  (testing "ANSI styles become style values"
+    (let [buf (render/write-string-to-buffer
+               (render/create-buffer 5 1) 0 0 "\u001B[31mRED\u001B[0m")
+          red (render/get-cell buf 0 0)]
+      (is (= "R" (:cluster red)))
+      (is (= {:fg :red} (:style red)))
+      (is (= {:fg :red} (:style (render/get-cell buf 1 0)))))))
 
-  (testing "Set cell out of bounds doesn't crash"
-    (let [buf (render/create-buffer 10 5)
-          cell (render/cell \X "")
-          buf2 (render/set-cell buf 20 2 cell)]
-      (is (= buf buf2))))) ; Buffer unchanged
+(deftest test-write-lines
+  (let [buf (render/write-lines-to-buffer (render/create-buffer 4 3) 0 0 ["a" "b" "c"])]
+    (is (= "a" (:cluster (render/get-cell buf 0 0))))
+    (is (= "b" (:cluster (render/get-cell buf 0 1))))
+    (is (= "c" (:cluster (render/get-cell buf 0 2))))))
 
-(deftest test-clear-buffer
-  (testing "Clear buffer resets all cells"
-    (let [buf (render/create-buffer 10 5)
-          cell (render/cell \X "\u001B[32m")
-          buf2 (-> buf
-                   (render/set-cell 0 0 cell)
-                   (render/set-cell 5 2 cell)
-                   (render/set-cell 9 4 cell))
-          buf3 (render/clear-buffer buf2)
-          cell-00 (render/get-cell buf3 0 0)
-          cell-52 (render/get-cell buf3 5 2)]
-      (is (= \space (:char cell-00)))
-      (is (= "" (:ansi cell-00)))
-      (is (= \space (:char cell-52)))
-      (is (= "" (:ansi cell-52))))))
+;; ──────────────────────── Edge rules ──────────────────────
 
-;; ──────────────────────── ANSI Parsing Tests ──────────────────────
+(deftest test-write-clears-half-a-wide-cell
+  (testing "a write starting in the middle of a wide cell replaces it with spaces"
+    (let [buf (-> (render/create-buffer 4 1)
+                  (render/write-string-to-buffer 0 0 "😀")
+                  (render/write-string-to-buffer 1 0 "X"))]
+      (is (= " " (:cluster (render/get-cell buf 0 0))))
+      (is (= "X" (:cluster (render/get-cell buf 1 0))))
+      (is (= " " (:cluster (render/get-cell buf 2 0))))))
+  (testing "a wide cluster over an existing pair clears both old cells"
+    (let [buf (-> (render/create-buffer 5 1)
+                  (render/write-string-to-buffer 0 0 "ab")
+                  (render/write-string-to-buffer 0 0 "中"))]
+      (is (= "中" (:cluster (render/get-cell buf 0 0))))
+      (is (render/continuation? (render/get-cell buf 1 0))))
+    (let [buf (-> (render/create-buffer 5 1)
+                  (render/write-string-to-buffer 0 0 "😀")
+                  (render/write-string-to-buffer 0 0 "x"))]
+      (is (= "x" (:cluster (render/get-cell buf 0 0))))
+      (is (= " " (:cluster (render/get-cell buf 1 0)))))))
 
-(deftest test-strip-ansi
-  (testing "Strip ANSI codes from string"
-    (is (= "Hello" (render/strip-ansi "\u001B[31mHello\u001B[0m")))
-    (is (= "Hello World" (render/strip-ansi "\u001B[31mHello\u001B[32m World\u001B[0m")))
-    (is (= "link"
-           (render/strip-ansi
-            "\u001B[2K\u001B]8;;https://x\u001B\\link\u001B]8;;\u001B\\")))
-    (is (= "Plain" (render/strip-ansi "Plain")))))
+(deftest test-wide-cluster-at-right-edge-does-not-split
+  (let [buf (render/write-string-to-buffer (render/create-buffer 3 1) 2 0 "😀")]
+    (is (= " " (:cluster (render/get-cell buf 2 0))))
+    (is (not (render/wide? (render/get-cell buf 2 0))))))
 
-(deftest test-parse-line-with-ansi
-  (testing "Parse plain string"
-    (let [cells (render/parse-line-with-ansi "ABC")]
-      (is (= 3 (count cells)))
-      (is (= \A (:char (first cells))))
-      (is (= "" (:ansi (first cells))))))
+(deftest test-zero-width-attaches-to-preceding-cluster
+  ;; "e" + COMBINING ACUTE ACCENT is one cluster.
+  (let [buf (render/write-string-to-buffer (render/create-buffer 4 1) 0 0 "ae\u0301b")]
+    (is (= "a" (:cluster (render/get-cell buf 0 0))))
+    (is (= "e\u0301" (:cluster (render/get-cell buf 1 0))))
+    (is (= "b" (:cluster (render/get-cell buf 2 0))))
+    (is (= " " (:cluster (render/get-cell buf 3 0))))))
 
-  (testing "Parse string with ANSI codes"
-    (let [cells (render/parse-line-with-ansi "\u001B[31mRED\u001B[0m")]
-      (is (= 3 (count cells)))
-      (is (= \R (:char (first cells))))
-      (is (= "\u001B[31m" (:ansi (first cells))))))
+;; ──────────────────────── Dirty cells and regions ──────────────────────
 
-  (testing "Parse string with multiple ANSI codes"
-    (let [line "\u001B[31m\u001B[1mBOLD RED\u001B[0m"
-          cells (render/parse-line-with-ansi line)]
-      (is (= 8 (count cells)))
-      (is (= \B (:char (first cells))))
-      (is (= "\u001B[31m\u001B[1m" (:ansi (first cells))))))
-
-  (testing "Non-SGR controls do not become cells or style state"
-    (is (= [(render/cell \h "") (render/cell \i "")]
-           (render/parse-line-with-ansi "\u001B[2Khi")))))
-
-;; ──────────────────────── Buffer Writing Tests ──────────────────────
-
-(deftest test-write-string-to-buffer
-  (testing "Write plain string to buffer"
-    (let [buf (render/create-buffer 20 5)
-          buf2 (render/write-string-to-buffer buf 0 0 "Hello")
-          cells [(render/get-cell buf2 0 0)
-                 (render/get-cell buf2 1 0)
-                 (render/get-cell buf2 2 0)
-                 (render/get-cell buf2 3 0)
-                 (render/get-cell buf2 4 0)]]
-      (is (= \H (:char (nth cells 0))))
-      (is (= \e (:char (nth cells 1))))
-      (is (= \l (:char (nth cells 2))))
-      (is (= \l (:char (nth cells 3))))
-      (is (= \o (:char (nth cells 4))))))
-
-  (testing "Write string with ANSI codes"
-    (let [buf (render/create-buffer 20 5)
-          buf2 (render/write-string-to-buffer buf 0 0 "\u001B[31mRED\u001B[0m")
-          cell-r (render/get-cell buf2 0 0)
-          cell-e (render/get-cell buf2 1 0)]
-      (is (= \R (:char cell-r)))
-      (is (= "\u001B[31m" (:ansi cell-r)))
-      (is (= \E (:char cell-e)))
-      (is (= "\u001B[31m" (:ansi cell-e))))))
-
-(deftest test-write-lines-to-buffer
-  (testing "Write multiple lines"
-    (let [buf (render/create-buffer 20 10)
-          lines ["Line 1" "Line 2" "Line 3"]
-          buf2 (render/write-lines-to-buffer buf 0 0 lines)
-          line1-start (render/get-cell buf2 0 0)
-          line2-start (render/get-cell buf2 0 1)
-          line3-start (render/get-cell buf2 0 2)]
-      (is (= \L (:char line1-start)))
-      (is (= \L (:char line2-start)))
-      (is (= \L (:char line3-start)))))
-
-  (testing "Write lines at offset"
-    (let [buf (render/create-buffer 20 10)
-          lines ["Offset"]
-          buf2 (render/write-lines-to-buffer buf 5 3 lines)
-          cell (render/get-cell buf2 5 3)]
-      (is (= \O (:char cell))))))
-
-;; ──────────────────────── Diff Tests ──────────────────────
-
-(deftest test-cells-equal
-  (testing "Identical cells are equal"
-    (let [c1 (render/cell \A "\u001B[31m")
-          c2 (render/cell \A "\u001B[31m")]
-      (is (render/cells-equal? c1 c2))))
-
-  (testing "Different characters are not equal"
-    (let [c1 (render/cell \A "\u001B[31m")
-          c2 (render/cell \B "\u001B[31m")]
-      (is (not (render/cells-equal? c1 c2)))))
-
-  (testing "Different ANSI codes are not equal"
-    (let [c1 (render/cell \A "\u001B[31m")
-          c2 (render/cell \A "\u001B[32m")]
-      (is (not (render/cells-equal? c1 c2))))))
-
-(deftest test-find-dirty-cells
-  (testing "No changes produces no dirty cells"
-    (let [buf1 (render/create-buffer 10 5)
-          buf2 (render/create-buffer 10 5)
-          dirty (render/find-dirty-cells buf1 buf2)]
-      (is (empty? dirty))))
-
-  (testing "Single cell change detected"
-    (let [buf1 (render/create-buffer 10 5)
-          buf2 (render/set-cell buf1 3 2 (render/cell \X ""))
-          dirty (render/find-dirty-cells buf1 buf2)]
-      (is (= 1 (count dirty)))
-      (is (= [3 2 (render/cell \X "")] (first dirty)))))
-
-  (testing "Multiple cell changes detected"
-    (let [buf1 (render/create-buffer 10 5)
-          buf2 (-> buf1
-                   (render/set-cell 0 0 (render/cell \A ""))
-                   (render/set-cell 5 2 (render/cell \B ""))
-                   (render/set-cell 9 4 (render/cell \C "")))
-          dirty (render/find-dirty-cells buf1 buf2)]
-      (is (= 3 (count dirty))))))
+(deftest test-find-dirty-cells-is-value-based
+  (let [old (render/create-buffer 3 1)
+        new (render/write-string-to-buffer old 1 0 "x")]
+    (is (= [[1 0 (render/get-cell new 1 0)]] (vec (render/find-dirty-cells old new)))))
+  (testing "changing only an escape spelling does not dirty a cell"
+    (let [old (render/write-string-to-buffer (render/create-buffer 3 1) 0 0 "\u001B[31mA")
+          new (render/write-string-to-buffer old 0 0 "\u001B[31mA")]
+      (is (empty? (render/find-dirty-cells old new))))))
 
 (deftest test-find-dirty-regions
-  (testing "Single cell becomes single region"
-    (let [dirty-cells [[5 2 (render/cell \X "")]]
-          regions (render/find-dirty-regions dirty-cells)]
-      (is (= 1 (count regions)))
-      (is (= 2 (:y (first regions))))
-      (is (= 5 (:x (first regions))))
-      (is (= 1 (count (:cells (first regions)))))))
-
-  (testing "Consecutive horizontal cells grouped into one region"
-    (let [dirty-cells [[5 2 (render/cell \A "")]
-                       [6 2 (render/cell \B "")]
-                       [7 2 (render/cell \C "")]]
-          regions (render/find-dirty-regions dirty-cells)]
-      (is (= 1 (count regions)))
-      (is (= 2 (:y (first regions))))
-      (is (= 5 (:x (first regions))))
-      (is (= 3 (count (:cells (first regions)))))))
-
-  (testing "Non-consecutive cells create separate regions"
-    (let [dirty-cells [[5 2 (render/cell \A "")]
-                       [8 2 (render/cell \B "")]] ; Gap at position 6, 7
-          regions (render/find-dirty-regions dirty-cells)]
-      (is (= 2 (count regions))))))
-
-(deftest test-apply-diff-output
-  (testing "Apply diff writes the exact dirty region bytes"
-    (let [old-buffer (render/create-buffer 2 1)
-          new-buffer (render/write-string-to-buffer old-buffer 0 0 "AB")
-          regions (atom nil)
-          output (with-out-str
-                   (reset! regions (render/apply-diff old-buffer new-buffer)))]
-      (is (= 1 @regions))
-      (is (= "\u001B[1;1HAB\u001B[0m" output)))))
-
-;; ──────────────────────── Render State Tests ──────────────────────
-
-(deftest test-render-state-creation
-  (testing "Create initial render state"
-    (let [clock (constantly 1000000000)
-          state (render/render-state 80 24 :clock clock)]
-      (is (= 80 (:width state)))
-      (is (= 24 (:height state)))
-      (is (= 0 (:frame-count state)))
-      (is (= 60 (:target-fps state)))
-      (is (= 1000000000 (:last-render-time state)))
-      (is (= 1000000000 (:last-resize-check state)))
-      (is (identical? clock (:clock state)))
-      (is (some? (:front-buffer state)))
-      (is (some? (:back-buffer state))))))
-
-(deftest test-swap-buffers
-  (testing "Swap front and back buffers"
-    (let [state (render/render-state 10 5)
-          cell (render/cell \X "")
-          state2 (assoc state :back-buffer
-                       (render/set-cell (:back-buffer state) 5 2 cell))
-          state3 (render/swap-buffers state2)
-          front-cell (render/get-cell (:front-buffer state3) 5 2)]
-      (is (= \X (:char front-cell))))))
-
-(deftest test-update-back-buffer
-  (testing "Update back buffer with lines"
-    (let [state (render/render-state 80 24)
-          lines ["Line 1" "Line 2"]
-          state2 (render/update-back-buffer state lines)
-          cell (render/get-cell (:back-buffer state2) 0 0)]
-      (is (= \L (:char cell))))))
-
-;; ──────────────────────── Frame Rate Tests ──────────────────────
-
-(deftest test-frame-time-calculation
-  (testing "Calculate frame time for 60 FPS"
-    (is (< (Math/abs (- (render/frame-time-ms 60) 16.666)) 0.1)))
-
-  (testing "Calculate frame time for 30 FPS"
-    (is (< (Math/abs (- (render/frame-time-ms 30) 33.333)) 0.1))))
-
-(deftest test-should-render
-  (testing "Render eligibility follows the injected monotonic clock"
-    (let [now (atom 1000000000)
-          state (render/render-state 80 24 :clock #(deref now))]
-      (reset! now 1016666666)
-      (is (false? (render/should-render? state)))
-      (reset! now 1016666667)
-      (is (true? (render/should-render? state)))
-      (let [updated (render/update-render-time state)]
-        (is (= 1016666667 (:last-render-time updated)))
-        (is (false? (render/should-render? updated)))))))
-
-;; ──────────────────────── Buffer Statistics Tests ──────────────────────
+  (let [dirty [[5 2 (render/cell "A")]
+               [6 2 (render/cell "B")]
+               [7 2 (render/cell "C")]
+               [8 2 (render/cell "D")]]
+        regions (render/find-dirty-regions dirty)]
+    (is (= 1 (count regions)))
+    (is (= {:y 2 :x 5} (select-keys (first regions) [:y :x])))
+    (is (= ["A" "B" "C" "D"] (mapv :cluster (:cells (first regions))))))
+  (let [regions (render/find-dirty-regions [[5 2 (render/cell "A")]
+                                            [8 2 (render/cell "B")]])]
+    (is (= 2 (count regions))))
+  (testing "a large contiguous row is one region without a quadratic scan"
+    (let [dirty (mapv (fn [x] [x 0 (render/cell "x")]) (range 5000))]
+      (is (= 1 (count (render/find-dirty-regions dirty)))))))
 
 (deftest test-buffer-stats
-  (testing "Empty buffer statistics"
-    (let [buf (render/create-buffer 10 5)
-          stats (render/buffer-stats buf)]
-      (is (= 10 (:width stats)))
-      (is (= 5 (:height stats)))
-      (is (= 50 (:total-cells stats)))
-      (is (= 0 (:non-empty-cells stats)))))
+  (let [buf (render/write-string-to-buffer (render/create-buffer 4 1) 0 0 "ab")
+        stats (render/buffer-stats buf)]
+    (is (= 4 (:width stats)))
+    (is (= 1 (:height stats)))
+    (is (= 4 (:total-cells stats)))
+    (is (= 2 (:non-empty-cells stats)))))
 
-  (testing "Buffer with content statistics"
-    (let [buf (render/create-buffer 10 5)
-          buf2 (-> buf
-                   (render/set-cell 0 0 (render/cell \A ""))
-                   (render/set-cell 1 0 (render/cell \B ""))
-                   (render/set-cell 2 0 (render/cell \C "")))
-          stats (render/buffer-stats buf2)]
-      (is (= 50 (:total-cells stats)))
-      (is (= 3 (:non-empty-cells stats))))))
+;; ──────────────────────── Golden tests through the virtual terminal ──────────────────────
 
-(deftest test-render-stats
-  (testing "Render state statistics"
-    (let [state (render/render-state 80 24)
-          stats (render/render-stats state)]
-      (is (= 0 (:frame-count stats)))
-      (is (= 60 (:target-fps stats)))
-      (is (= 80 (get-in stats [:dimensions :width])))
-      (is (= 24 (get-in stats [:dimensions :height])))
-      (is (some? (:front-buffer stats)))
-      (is (some? (:back-buffer stats))))))
+(defn- golden [width height lines]
+  (let [state (render/render-state width height :clock (constantly 0))
+        output (with-out-str (render/force-render state lines))]
+    (vt/feed (vt/make-vt width height) output)))
 
-;; ──────────────────────── Integration Tests ──────────────────────
+(deftest test-golden-plain-text
+  (let [vt (golden 6 2 ["hi" "world"])]
+    (is (= [["h" "i" " " " " " " " "]
+            ["w" "o" "r" "l" "d" " "]]
+           (vt/cluster-grid vt)))
+    (is (= {} (:style (vt/cell-at vt 0 0))))))
 
-(deftest test-render-frame-integration
-  (testing "Render frame writes exact bytes and records the injected time"
-    (let [now (atom 1000000000)
-          state (render/render-state 2 1 :clock #(deref now))
-          rendered (atom nil)]
-      (reset! now 1100000000)
-      (let [output (with-out-str
-                     (reset! rendered (render/render-frame state ["AB"])))]
-        (is (= "\u001B[1;1HAB\u001B[0m" output))
-        (is (= 1 (:frame-count @rendered)))
-        (is (= 1100000000 (:last-render-time @rendered)))))))
+(deftest test-golden-emoji-and-cjk
+  (let [vt (golden 6 1 ["a😀中"])]
+    (is (= [["a" "😀" "" "中" "" " "]] (vt/cluster-grid vt)))))
 
-(deftest test-move-cursor
-  (testing "Generate cursor movement ANSI code"
-    (is (= "\u001B[1;1H" (render/move-cursor 0 0)))
-    (is (= "\u001B[10;20H" (render/move-cursor 19 9)))))
+(deftest test-golden-styles
+  (let [vt (golden 6 1 ["\u001B[31mR\u001B[0mB"])]
+    (is (= [["R" "B" " " " " " " " "]] (vt/cluster-grid vt)))
+    (is (= {:fg :red} (:style (vt/cell-at vt 0 0))))
+    (is (= {} (:style (vt/cell-at vt 1 0))))))
 
-(deftest test-render-cell
-  (testing "Render cell with ANSI codes"
-    (let [cell (render/cell \A "\u001B[31m")
-          result (render/render-cell cell)]
-      (is (= "\u001B[31mA" result))))
+;; ──────────────────────── Direct byte tests ──────────────────────
 
-  (testing "Render empty cell"
-    (let [cell (render/empty-cell)
-          result (render/render-cell cell)]
-      (is (= " " result)))))
+(deftest test-apply-diff-exact-bytes
+  (testing "a plain region emits cursor plus graphemes, no reset"
+    (let [old (render/create-buffer 2 1)
+          new (render/write-string-to-buffer old 0 0 "AB")
+          output (with-out-str (render/apply-diff old new))]
+      (is (= "\u001B[1;1HAB" output))))
+  (testing "a styled region emits minimal SGR and closes it"
+    (let [old (render/create-buffer 3 1)
+          new (render/write-string-to-buffer old 0 0 "\u001B[31mRED")
+          output (with-out-str (render/apply-diff old new))]
+      (is (= "\u001B[1;1H\u001B[31mRED\u001B[0m" output))))
+  (testing "a wide region emits the lead grapheme once"
+    (let [old (render/create-buffer 3 1)
+          new (render/write-string-to-buffer old 0 0 "😀")
+          output (with-out-str (render/apply-diff old new))]
+      (is (= "\u001B[1;1H😀" output)))))
 
-;; ──────────────────────── Error Handling Tests ──────────────────────
+(deftest test-terminal-controls
+  (is (= "\u001B[2J\u001B[H" (with-out-str (render/clear-screen))))
+  (is (= "\u001B[?25l\u001B[2J\u001B[H" (with-out-str (render/setup-terminal))))
+  (is (= "\u001B[?25h\u001B[0m" (with-out-str (render/restore-terminal)))))
 
-(deftest test-render-with-invalid-string
-  (testing "write-string-to-buffer throws on non-string input"
-    (let [buf (render/create-buffer 10 5)]
-      (is (thrown? Exception (render/write-string-to-buffer buf 0 0 123)))
-      (is (thrown? Exception (render/write-string-to-buffer buf 0 0 nil))))))
+;; ──────────────────────── Render state and timing ──────────────────────
 
-(deftest test-render-with-invalid-lines
-  (testing "write-lines-to-buffer throws on non-string lines"
-    (let [buf (render/create-buffer 10 5)]
-      (is (thrown? Exception (render/write-lines-to-buffer buf 0 0 ["valid" 123 "also valid"])))
-      (is (thrown? Exception (render/write-lines-to-buffer buf 0 0 [nil "valid"]))))))
+(deftest test-render-state-and-clock
+  (let [state (render/render-state 80 24 :clock (constantly 42))]
+    (is (= 80 (:width state)))
+    (is (= 24 (:height state)))
+    (is (= 0 (:frame-count state)))
+    (is (= 60 (:target-fps state)))
+    (is (= 42 (:last-render-time state)))))
 
-(deftest test-terminal-size-defaults
-  (testing "get-terminal-size uses defaults when the injected source fails"
-    (is (= {:width 80 :height 24}
-           (render/get-terminal-size (constantly nil))))
-    (is (= {:width 80 :height 24}
-           (render/get-terminal-size
-            (fn [] (throw (ex-info "unavailable" {}))))))))
+(deftest test-should-render-uses-injected-clock
+  (let [now (atom 0)
+        state (render/render-state 80 24 :clock #(deref now))]
+    (reset! now 16000000)
+    (is (false? (render/should-render? state)))
+    (reset! now 16666667)
+    (is (true? (render/should-render? state)))
+    (is (= 16666667 (:last-render-time (render/update-render-time state))))))
 
-(deftest test-render-frame-error-recovery
-  (testing "render-frame returns original state on error"
-    (let [now (atom 1000000000)
-          state (render/render-state 80 24 :clock #(deref now))
-          ;; Try to render with invalid content (this should be caught internally)
-          invalid-lines [123 456]  ; non-strings
-          ;; This should throw but be caught inside render-frame (if validation is done there)
-          ;; For now just test with valid input
-          valid-lines ["test"]
-          _ (reset! now 1100000000)
-          state3 (atom nil)
-          _ (with-out-str
-              (reset! state3 (render/render-frame state valid-lines)))]
-      ;; Should have incremented frame count without crashing
-      (is (number? (:frame-count @state3))))))
+;; ──────────────────────── Error handling ──────────────────────
 
-(deftest test-buffer-operations-dont-crash
-  (testing "Buffer operations handle edge cases gracefully"
-    (let [buf (render/create-buffer 10 5)]
-      ;; Setting cells out of bounds should not crash
-      (is (some? (render/set-cell buf 100 100 (render/empty-cell))))
-      (is (some? (render/set-cell buf -1 -1 (render/empty-cell))))
+(deftest test-invalid-input-throws
+  (is (= :limner.render/invalid-string
+         (try (render/write-string-to-buffer (render/create-buffer 3 1) 0 0 42)
+              (catch clojure.lang.ExceptionInfo e (:limner/error (ex-data e))))))
+  (is (= :limner.render/invalid-lines
+         (try (render/write-lines-to-buffer (render/create-buffer 3 1) 0 0 ["ok" 7])
+              (catch clojure.lang.ExceptionInfo e (:limner/error (ex-data e)))))))
 
-      ;; Getting cells out of bounds returns nil
-      (is (nil? (render/get-cell buf 100 100)))
-      (is (nil? (render/get-cell buf -1 -1)))))
+;; ──────────────────────── Property tests ──────────────────────
 
-  (testing "Clear buffer always works"
-    (let [buf (render/create-buffer 10 5)
-          cell (render/cell \X "")
-          buf2 (render/set-cell buf 5 2 cell)
-          buf3 (render/clear-buffer buf2)
-          retrieved (render/get-cell buf3 5 2)]
-      ;; After clear, cell should be empty again
-      (is (= \space (:char retrieved))))))
+(def ^:private cluster-gen
+  (gen/elements ["a" "b" "hi" " " "😀" "中" "é" "✓" "⚡" "x"]))
 
-(deftest test-force-render-error-handling
-  (testing "force-render writes the exact clear and frame bytes"
-    (let [clock (constantly 1000000000)
-          state (render/render-state 9 1 :clock clock)
-          lines ["test line"]
-          state2 (atom nil)
-          output (with-out-str
-                   (reset! state2 (render/force-render state lines)))]
-      (is (= (str "\u001B[2J\u001B[H"
-                  "\u001B[1;1Htest\u001B[0m"
-                  "\u001B[1;6Hline\u001B[0m")
-             output))
-      (is (= 1 (:frame-count @state2))))))
+(def ^:private style-gen
+  (gen/elements [{} {:fg :red} {:bold true} {:bg :blue :fg :white} {:underline :single}]))
 
-(deftest test-terminal-setup-and-restore
-  (testing "Terminal operations write their exact control sequences"
-    (is (= "\u001B[2J\u001B[H" (with-out-str (render/clear-screen))))
-    (is (= "\u001B[?25l\u001B[2J\u001B[H"
-           (with-out-str (render/setup-terminal))))
-    (is (= "\u001B[?25h\u001B[0m"
-           (with-out-str (render/restore-terminal))))))
+(def ^:private line-gen
+  (gen/fmap (fn [pairs]
+              (text/to-ansi (mapv (fn [[cluster style]]
+                                    {:text cluster :style style})
+                                  pairs)))
+            (gen/vector (gen/tuple cluster-gen style-gen) 0 5)))
 
-;; Test the new error boundary functions
+(def ^:private frames-gen
+  (gen/vector (gen/vector line-gen 0 4) 1 6))
 
-(deftest test-update-back-buffer-error-recovery
-  (testing "update-back-buffer recovers from errors"
-    (let [state (render/render-state 80 24)
-          ;; With valid lines, should work
-          state2 (render/update-back-buffer state ["test"])]
-      (is (some? state2))
-      (is (some? (:back-buffer state2))))))
+(defn- diff-frame!
+  "Apply one frame to a render state and return [state emitted-bytes]."
+  [state lines]
+  (let [updated (render/update-back-buffer state lines)
+        output (with-out-str
+                 (render/apply-diff (:front-buffer updated) (:back-buffer updated)))]
+    [(render/swap-buffers updated) output]))
 
-(deftest test-render-state-has-resize-check-time
-  (testing "New render state includes last-resize-check"
-    (let [state (render/render-state 80 24 :clock (constantly 42))]
-      (is (= 42 (:last-resize-check state))))))
+(defn- valid-row?
+  "True when every wide lead has its continuation and vice versa."
+  [row]
+  (every?
+   (fn [index]
+     (let [c (nth row index)]
+       (cond
+         (render/wide? c) (and (< (inc index) (count row))
+                               (render/continuation? (nth row (inc index))))
+         (render/continuation? c) (and (pos? index)
+                                       (render/wide? (nth row (dec index))))
+         :else true)))
+   (range (count row))))
 
-(deftest test-terminal-size-validation
-  (testing "get-terminal-size accepts values within its current bounds"
-    (is (= {:width 120 :height 40}
-           (render/get-terminal-size
-            (constantly {:width 120 :height 40})))))
-  (testing "get-terminal-size silently replaces undersized dimensions"
-    ;; This legacy behavior is intentionally unchanged until limner-2-4.
-    (is (= {:width 80 :height 24}
-           (render/get-terminal-size
-            (constantly {:width 19 :height 9})))))
-  (testing "get-terminal-size clamps oversized dimensions"
-    (is (= {:width 500 :height 200}
-           (render/get-terminal-size
-            (constantly {:width 501 :height 201}))))))
+(defn- no-lone-surrogate? [s]
+  (loop [i 0]
+    (if (>= i (.length ^String s))
+      true
+      (let [ch (.charAt ^String s i)]
+        (cond
+          (Character/isHighSurrogate ch)
+          (if (and (< (inc i) (.length ^String s))
+                   (Character/isLowSurrogate (.charAt ^String s (inc i))))
+            (recur (+ i 2))
+            false)
+          (Character/isLowSurrogate ch) false
+          :else (recur (inc i)))))))
+
+(deftest diff-render-matches-full-redraw
+  (let [width 12 height 4
+        result
+        (tc/quick-check
+         100
+         (prop/for-all [frames frames-gen]
+           (let [[_final diff-vt]
+                 (reduce (fn [[state target-vt] lines]
+                           (let [[state output] (diff-frame! state lines)]
+                             [state (vt/feed target-vt output)]))
+                         [(render/render-state width height) (vt/make-vt width height)]
+                         frames)
+                 full-output (with-out-str
+                               (render/force-render (render/render-state width height)
+                                                    (last frames)))
+                 full-vt (vt/feed (vt/make-vt width height) full-output)]
+             (= (vt/screen diff-vt) (vt/screen full-vt))))
+         :seed 4711)]
+    (is (:pass? result) (pr-str (dissoc result :result-data)))))
+
+(deftest buffer-never-holds-half-a-wide-cluster
+  (let [result
+        (tc/quick-check
+         200
+         (prop/for-all [frames frames-gen]
+           (let [state (reduce (fn [state lines]
+                                 (render/update-back-buffer state lines))
+                               (render/render-state 12 4)
+                               frames)]
+             (every? (fn [row]
+                       (and (valid-row? row)
+                            (every? (fn [c] (no-lone-surrogate? (:cluster c))) row)))
+                     (:cells (:back-buffer state)))))
+         :seed 90210)]
+    (is (:pass? result) (pr-str (dissoc result :result-data)))))

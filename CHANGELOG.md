@@ -53,6 +53,14 @@ The following functions changed their error behaviour:
   stats without printing.
 - `limner.text` and `limner.unicode.*` invalid-input exceptions now carry a
   `:limner/error` class in their data map (the classes are listed in ADR 0004).
+- `limner.render` (`cell`, `empty-cell`, `write-string-to-buffer`,
+  `write-lines-to-buffer`, `find-dirty-cells`, `find-dirty-regions`,
+  `apply-diff`, `set-cell`, `get-cell`, `buffer-stats`) moved to the ADR 0005
+  grapheme-and-style cell model. `cell` now takes a cluster string and a style
+  map; `parse-line-with-ansi` and `extract-ansi-state` are removed. A wide
+  cluster is a lead cell plus a continuation cell, cells compare by value, and
+  `write-string-to-buffer` never splits a glyph at either edge. `limner.render`
+  is experimental; the changes are listed here so callers can migrate.
 
 ### Added
 
@@ -77,6 +85,11 @@ The following functions changed their error behaviour:
   babashka, and available lint gates.
 - Added injectable clocks to the experimental render and streaming APIs, and
   an injectable size source to `limner.render/get-terminal-size`.
+- Added `limner.text/clusters` (per-grapheme `{:cluster :style :width :raw}`)
+  and `limner.text.style/apply-sgr`, and replaced the render buffer with the
+  ADR 0005 grapheme-and-style cell model.
+- Added a test-only virtual terminal (`test/limner/vt.clj`) and golden and
+  property tests for the render buffer, including REVIEW probes 6 and 6c.
 
 ### Changed
 

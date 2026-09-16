@@ -125,6 +125,21 @@
       (let [{:keys [plain]} (source input)]
         (unicode-width/string-width plain width-options)))))
 
+(defn clusters
+  "Return one map per grapheme unit: `{:cluster :style :width :raw}`.
+
+  `:style` is the style of the cluster's first text fragment, matching ADR
+  0003's partial-wide-cluster rule; `:raw` concatenates opaque controls
+  anchored to the cluster. A zero-width cluster has `:width` 0."
+  [input width-options]
+  (let [width-options (options width-options)]
+    (mapv (fn [{:keys [plain width content]}]
+            {:cluster plain
+             :width width
+             :style (or (some :style content) {})
+             :raw (apply str (keep :raw content))})
+          (units input width-options))))
+
 (defn- validate-bounds [start end]
   (when-not (and (integer? start) (integer? end) (<= 0 start end))
     (fail :limner.text/invalid-bounds "Column slice requires non-negative ordered integer bounds"

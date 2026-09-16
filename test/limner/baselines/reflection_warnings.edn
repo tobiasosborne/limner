@@ -15,5 +15,4 @@
  "limner/events.clj | call to static method isUpperCase on java.lang.Character can't be resolved (argument types: unknown)."
  "limner/events.clj | call to method indexOf on java.lang.Object can't be resolved (no such method)."
  "limner/events.clj | call to method indexOf on java.lang.Object can't be resolved (no such method)."
- "limner/render.clj | call to method indexOf can't be resolved (target class is unknown)."
  "limner/render.clj | call to static method sleep on java.lang.Thread can't be resolved (argument types: unknown)."]

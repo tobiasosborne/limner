@@ -136,6 +136,14 @@
                     (assoc style :bg (ansi-color value)))
     style))
 
+(defn apply-sgr
+  "Apply a sequence of parsed SGR operations to a canonical style map.
+
+  This is the single implementation of ADR 0003 SGR semantics; `from-ansi`
+  and the test virtual terminal both use it so style state cannot drift."
+  [style operations]
+  (reduce apply-operation style operations))
+
 (defn from-ansi [input]
   (when-not (string? input)
     (fail :limner.text.style/invalid-input
