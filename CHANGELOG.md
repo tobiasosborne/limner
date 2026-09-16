@@ -121,6 +121,15 @@ The following functions changed their error behaviour:
   end while a title stays untouched (REVIEW F7).
 - Expanded content tabs in `limner.borders` to eight-column tab stops before
   layout instead of measuring them as zero-width controls.
+- Distributed flex remainder by largest fractional share in
+  `limner.layout/resolve-flex-constraints`, so a stack or split allocates every
+  row or column and no final row is dropped (REVIEW F6).
+- Made `limner.layout/clip` and `pad-to-box` measure and cut through
+  `limner.text`, so they respect display columns and never split a wide
+  cluster (REVIEW B3).
+- Made `limner.layout` throw `:limner.layout/invalid-dimension` with an
+  actionable message when spacing and padding exceed the available space,
+  instead of passing a negative space to constraint resolution (REVIEW D2).
 - Made `limner.render/buffer-stats` count a wide grapheme once rather than
   counting its continuation as a second non-empty cell.
 - Removed every JVM reflection warning from `src/` with explicit type hints

@@ -122,7 +122,8 @@
   "Standalone text-rendering namespaces; extended as components migrate."
   #{"src/limner/borders.clj"
     "src/limner/borders/internal.clj"
-    "src/limner/borders/effects.clj"})
+    "src/limner/borders/effects.clj"
+    "src/limner/layout.clj"})
 
 (def ^:private banned-text-symbols
   "Symbols whose UTF-16 semantics must not appear in a component namespace."
@@ -142,7 +143,13 @@
    "Counts box rows to find the last one; never measures text."
 
    ["src/limner/borders/effects.clj" 'limner.borders.effects/side-by-side 'count]
-   "Counts box rows to pad the shorter column; never measures text."})
+   "Counts box rows to pad the shorter column; never measures text."
+
+   ["src/limner/layout.clj" 'count]
+   "Layout counts rows, cells, and flex items; text is measured by limner.text."
+
+   ["src/limner/layout.clj" 'nth]
+   "Layout indexes numeric share vectors; text is measured by limner.text."})
 
 (defn- banned-use [form]
   (cond
@@ -177,6 +184,7 @@
     (doseq [{:keys [path form name]} (component-entries)
             :let [use (some banned-use (walk form))]
             :when use]
-      (is (contains? allowed-component-uses [path name (symbol use)])
+      (is (or (contains? allowed-component-uses [path name (symbol use)])
+              (contains? allowed-component-uses [path (symbol use)]))
           (str path " / " name " uses " use "; route it through limner.text or "
                "add it to allowed-component-uses with a reason.")))))

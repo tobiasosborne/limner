@@ -5,7 +5,7 @@
   `:limner.layout/invalid-constraint`, `:limner.layout/invalid-dimension`,
   `:limner.layout/invalid-spacing`, `:limner.layout/unknown-layout-type`,
   `:limner.layout/empty-components`, or `:limner.layout/invalid-grid`."
-  (:require [clojure.string :as str]))
+  (:require [limner.text :as text]))
 
 ;; ────────────────────── Error Handling & Validation ──────────────────────
 
@@ -131,32 +131,32 @@
            :flex    0))) ; flex is resolved separately
 
 (defn resolve-flex-constraints
-  "Distribute remaining space among flex items
+  "Distribute `remaining-space` among flex items by largest remainder.
 
-   Handles edge cases:
-   - Empty flex-items: returns empty sequence
-   - Zero total flex value: distributes equally
-   - Negative remaining space: throws ex-info"
+  Each item receives its exact proportional share rounded down; the leftover
+  whole columns or rows then go one each to the items with the largest
+  fractional share, ties broken by position. This guarantees that the
+  allocated sizes sum to `remaining-space`, so a flex row in a stack never
+  drops the final row (REVIEW F6). Zero total flex distributes equally."
   [flex-items remaining-space]
   (when-not (and (number? remaining-space) (>= remaining-space 0))
     (throw (ex-info "Remaining space must be a non-negative number"
                     {:limner/error :limner.layout/invalid-dimension
                      :remaining-space remaining-space :type (type remaining-space)})))
-  (cond
-    (empty? flex-items)
+  (if (empty? flex-items)
     []
-
-    (neg? remaining-space)
-    (repeat (count flex-items) 0)
-
-    :else
-    (let [total-flex (reduce + (map :value flex-items))]
-      (if (pos? total-flex)
-        (for [item flex-items]
-          (max 0 (int (* remaining-space (/ (:value item) total-flex)))))
-        ;; If total flex is 0, distribute equally
-        (let [per-item (int (/ remaining-space (count flex-items)))]
-          (repeat (count flex-items) per-item))))))
+    (let [remaining (long remaining-space)
+          n (count flex-items)
+          total-flex (reduce + (map :value flex-items))
+          weights (if (pos? total-flex)
+                    (mapv #(/ (double (:value %)) total-flex) flex-items)
+                    (vec (repeat n (/ 1.0 n))))
+          exact (mapv #(* remaining %) weights)
+          floors (mapv #(long (Math/floor %)) exact)
+          allocated (reduce + floors)
+          leftover (int (- remaining allocated))
+          order (sort-by (fn [i] [(- (nth floors i) (nth exact i)) i]) (range n))]
+      (reduce (fn [sizes i] (update sizes i inc)) floors (take leftover order)))))
 
 ;; ────────────────────── Vertical Stack Layout ──────────────────────
 (defn stack
@@ -188,8 +188,15 @@
                               (* (dec (count components)) spacing)))
 
         resolve-heights (fn [total-height]
-                          (let [avail (available-height total-height)
-                                ;; First pass: resolve fixed, percent, and auto
+                          (let [avail (available-height total-height)]
+                            (when (neg? avail)
+                              (throw (ex-info "Stack spacing and padding exceed the available height"
+                                              {:limner/error :limner.layout/invalid-dimension
+                                               :available-height avail
+                                               :total-height total-height
+                                               :spacing spacing :padding padding
+                                               :limner/hint "Reduce :spacing or :padding, or increase the total height"})))
+                            (let [;; First pass: resolve fixed, percent, and auto
                                 first-pass (for [{:keys [constraint content]} components]
                                             (if (= (:type constraint) :flex)
                                               {:size nil :flex constraint}
@@ -203,12 +210,12 @@
 
                                 ;; Second pass: fill in flex sizes
                                 flex-iter (atom 0)]
-                            (for [{:keys [size flex]} first-pass]
-                              (if flex
-                                (let [idx @flex-iter]
-                                  (swap! flex-iter inc)
-                                  (nth flex-sizes idx))
-                                size))))]
+                              (for [{:keys [size flex]} first-pass]
+                                (if flex
+                                  (let [idx @flex-iter]
+                                    (swap! flex-iter inc)
+                                    (nth flex-sizes idx))
+                                  size)))))]
 
     {:type :stack
      :components components
@@ -271,8 +278,15 @@
                              (* (dec (count components)) spacing)))
 
         resolve-widths (fn [total-width]
-                         (let [avail (available-width total-width)
-                               first-pass (for [{:keys [constraint content]} components]
+                         (let [avail (available-width total-width)]
+                           (when (neg? avail)
+                             (throw (ex-info "Hsplit spacing and padding exceed the available width"
+                                             {:limner/error :limner.layout/invalid-dimension
+                                              :available-width avail
+                                              :total-width total-width
+                                              :spacing spacing :padding padding
+                                              :limner/hint "Reduce :spacing or :padding, or increase the total width"})))
+                           (let [first-pass (for [{:keys [constraint content]} components]
                                            (if (= (:type constraint) :flex)
                                              {:size nil :flex constraint}
                                              {:size (resolve-constraint constraint avail
@@ -283,12 +297,12 @@
                                flex-items (keep :flex first-pass)
                                flex-sizes (resolve-flex-constraints flex-items remaining)
                                flex-iter (atom 0)]
-                           (for [{:keys [size flex]} first-pass]
-                             (if flex
-                               (let [idx @flex-iter]
-                                 (swap! flex-iter inc)
-                                 (nth flex-sizes idx))
-                               size))))]
+                             (for [{:keys [size flex]} first-pass]
+                               (if flex
+                                 (let [idx @flex-iter]
+                                   (swap! flex-iter inc)
+                                   (nth flex-sizes idx))
+                                 size)))))]
 
     {:type :hsplit
      :components components
@@ -445,13 +459,11 @@
 
 ;; ────────────────────── Utility Functions ──────────────────────
 (defn clip
-  "Clip content to fit within box dimensions
-   Returns a vector of strings, one per line
+  "Clip `content` to `width` display columns and `height` lines.
 
-   Handles edge cases:
-   - Negative or zero dimensions return empty vector
-   - nil content returns empty vector
-   - Validates width and height are non-negative"
+  Slicing goes through `limner.text`, so a wide cluster is never cut in half:
+  a partly covered cluster becomes spaces. Callers can rely on every returned
+  line being at most `width` columns wide (REVIEW B3)."
   [content width height]
   (validate-dimension width "width")
   (validate-dimension height "height")
@@ -460,17 +472,14 @@
     []
 
     :else
-    (let [lines (str/split-lines (str content))
-          clipped-lines (take height lines)]
-      (mapv #(subs % 0 (min (count %) width)) clipped-lines))))
+    (let [lines (take height (text/lines (str content)))]
+      (mapv #(text/to-ansi (text/slice-columns % 0 width)) lines))))
 
 (defn pad-to-box
-  "Pad content to fill box dimensions
+  "Pad `lines` to `width` display columns and at least `height` rows.
 
-   Handles edge cases:
-   - Negative or zero dimensions return empty vector
-   - Empty or nil lines return vector of empty lines
-   - Validates width and height are non-negative"
+  Padding and measurement go through `limner.text`, so wide content is padded
+  by its column width and styled lines keep their spans."
   [lines width height]
   (validate-dimension width "width")
   (validate-dimension height "height")
@@ -482,8 +491,7 @@
     (vec (repeat height (apply str (repeat width " "))))
 
     :else
-    (let [padded-lines (mapv #(str % (apply str (repeat (max 0 (- width (count %))) " ")))
-                             lines)
-          line-count (count padded-lines)
-          empty-lines (repeat (max 0 (- height line-count)) (apply str (repeat width " ")))]
-      (vec (concat padded-lines empty-lines)))))
+    (let [padded (mapv #(text/to-ansi (text/pad-right % width)) lines)
+          empty-line (apply str (repeat width " "))
+          line-count (count padded)]
+      (vec (concat padded (repeat (max 0 (- height line-count)) empty-line))))))

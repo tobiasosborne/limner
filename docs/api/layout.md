@@ -56,8 +56,17 @@ Allocates `p` percent (0-100) of the available space.
 `(flex n)`
 
 Allocates a proportional share of the *remaining* space after fixed, percent,
-and auto constraints are resolved. Integer rounding can leave space
-unallocated.
+and auto constraints are resolved. Each item receives its exact share rounded
+down, and the leftover columns or rows go one each to the items with the
+largest fractional share (ties broken by position), so the allocated sizes
+always sum to the remaining space and no final row is dropped.
+
+`resolve-flex-constraints` exposes the allocation directly:
+
+```clojure
+(layout/resolve-flex-constraints [(layout/flex 1) (layout/flex 1) (layout/flex 1)] 10)
+;; => [4 3 3]
+```
 
 ### `auto`
 `(auto)`
@@ -165,12 +174,15 @@ error class; layout functions do not return an empty fallback.
 ### `clip`
 `(clip content width height)`
 
-Splits string content into lines, keeps at most `height` lines, and takes at
-most `width` UTF-16 code units from each line. It does not yet clip by terminal
-columns and can split non-BMP characters.
+Splits string content into lines, keeps at most `height` lines, and clips each
+line to `width` terminal columns through `limner.text`. A wide cluster that is
+only partly inside the width becomes spaces, so a returned line is never wider
+than `width` and never contains half a grapheme.
 
 ### `pad-to-box`
 `(pad-to-box lines width height)`
 
-Pads short strings and adds blank lines using UTF-16 string length. It does not
-truncate strings longer than `width` or account for terminal column width.
+Pads each line to `width` terminal columns with `limner.text/pad-right` and
+adds exact-width blank lines until there are at least `height` rows. Content is
+measured by column width, so CJK and emoji lines are padded correctly, and an
+already-styled line keeps its spans.

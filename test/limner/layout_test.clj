@@ -1,6 +1,11 @@
 (ns limner.layout-test
   (:require [clojure.test :refer [deftest is testing]]
-            [limner.layout :as layout]))
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
+            [limner.component-support :as component]
+            [limner.layout :as layout]
+            [limner.text :as text]))
 
 ;; ──────────────────────── Box Model Tests ──────────────────────
 (deftest test-box-creation
@@ -69,8 +74,44 @@
   (testing "Proportional flex distribution"
     (let [flex-items [(layout/flex 1) (layout/flex 3)]
           sizes (layout/resolve-flex-constraints flex-items 100)]
-      (is (= [25 75] sizes)))))
+      (is (= [25 75] sizes))))
 
+  (testing "A remainder goes to the largest fractional shares"
+    (is (= [4 3 3]
+           (layout/resolve-flex-constraints
+            [(layout/flex 1) (layout/flex 1) (layout/flex 1)] 10)))
+    (is (= [3 3 2]
+           (layout/resolve-flex-constraints
+            [(layout/flex 1) (layout/flex 1) (layout/flex 1)] 8)))
+    (is (= [2 1]
+           (layout/resolve-flex-constraints
+            [(layout/flex 3) (layout/flex 1)] 3))))
+
+  (testing "Zero total flex still allocates every column"
+    (is (= [4 3 3]
+           (layout/resolve-flex-constraints
+            [(layout/flex 0) (layout/flex 0) (layout/flex 0)] 10)))))
+
+(deftest flex-stack-allocates-every-row
+  (testing "Three flex rows share the whole height"
+    (let [boxes (layout/layout-stack
+                 (layout/stack [{:constraint (layout/flex 1)}
+                                {:constraint (layout/flex 1)}
+                                {:constraint (layout/flex 1)}])
+                 10 10)]
+      (is (= [4 3 3] (mapv :height boxes)))
+      (is (= 10 (reduce + (map :height boxes))))
+      (is (= [0 4 7] (mapv :y boxes)))))
+
+  (testing "Heights plus spacing equal the total height"
+    (let [boxes (layout/layout-stack
+                 (layout/stack [{:constraint (layout/flex 1)}
+                                {:constraint (layout/flex 1)}]
+                               :spacing 1)
+                 10 9)]
+      (is (= [4 4] (mapv :height boxes)))
+      (is (= 9 (+ (reduce + (map :height boxes)) 1)))
+      (is (= [0 5] (mapv :y boxes))))))
 ;; ────────────────────── Vertical Stack Tests ──────────────────────
 (deftest test-vertical-stack
   (testing "Stack with fixed heights"
@@ -152,7 +193,68 @@
           clipped (layout/clip content 3 2)]
       (is (= 2 (count clipped)))
       (is (= "Hel" (first clipped)))
-      (is (= "Wor" (second clipped))))))
+      (is (= "Wor" (second clipped)))))
+
+  (testing "Clip is column-aware for wide clusters"
+    (component/assert-lines ["日 "] (layout/clip "日本語" 3 1))
+    (is (= 3 (text/width (first (layout/clip "日本語" 3 1))))))
+
+  (testing "Clip rejects invalid dimensions"
+    (is (thrown? clojure.lang.ExceptionInfo (layout/clip "x" -1 1)))
+    (is (thrown? clojure.lang.ExceptionInfo (layout/clip "x" 1 1.5)))))
+
+(deftest test-pad-to-box
+  (testing "Pad plain and wide content to the exact columns"
+    (is (= ["ab   "] (layout/pad-to-box ["ab"] 5 1)))
+    (is (= ["日本 "] (layout/pad-to-box ["日本"] 5 1)))
+    (is (= 5 (text/width (first (layout/pad-to-box ["日本"] 5 1))))))
+
+  (testing "Pad height with exact-width blank lines"
+    (let [padded (layout/pad-to-box ["x"] 3 3)]
+      (is (= ["x  " "   " "   "] padded)))))
+
+(deftest stack-spacing-beyond-height-throws
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo #"spacing|space"
+       (layout/layout-stack
+        (layout/stack [{:constraint (layout/fixed 1)}
+                       {:constraint (layout/fixed 1)}]
+                      :spacing 50)
+        10 10))))
+
+(deftest readme-layout-example
+  (testing "The README stack example resolves to its documented tuples"
+    (let [page (layout/stack
+                [{:constraint (layout/fixed 2) :content :header}
+                 {:constraint (layout/flex 1) :content :body}
+                 {:constraint (layout/fixed 1) :content :footer}]
+                :spacing 1)]
+      (is (= [[0 2 :header] [3 5 :body] [9 1 :footer]]
+             (mapv (juxt :y :height :content)
+                   (layout/layout-stack page 40 10)))))))
+
+(deftest flex-totals-property
+  (testing "All-flex stacks allocate exactly the available height"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [n (gen/choose 1 6)
+                                 total (gen/choose 0 60)]
+                    (let [boxes (layout/layout-stack
+                                 (layout/stack
+                                  (vec (repeat n {:constraint (layout/flex 1)})))
+                                 10 total)]
+                      (= total (reduce + (map :height boxes))))))]
+      (is (:pass? result) (pr-str result)))))
+
+(deftest clip-never-exceeds-requested-width-property
+  (testing "Clipping generated text never exceeds the requested columns"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [lines component/lines-gen
+                                 width (gen/choose 0 12)]
+                    (every? #(<= (text/width %) width)
+                            (layout/clip (clojure.string/join "\n" lines) width 3))))]
+      (is (:pass? result) (pr-str result)))))
 
 ;; Run all tests
 (defn run-tests []
