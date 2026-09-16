@@ -127,7 +127,8 @@
     "src/limner/table.clj"
     "src/limner/components/list.clj"
     "src/limner/components/input.clj"
-    "src/limner/components/progress.clj"})
+    "src/limner/components/progress.clj"
+    "src/limner/components/statusbar.clj"})
 
 (def ^:private banned-text-symbols
   "Symbols whose UTF-16 semantics must not appear in a component namespace."

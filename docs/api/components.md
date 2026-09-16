@@ -181,7 +181,10 @@ Renders the progress component to a string.
 ## StatusBar
 `limner.components.statusbar`
 
-Application status line with sections.
+Application status line with sections. The bar is one line of exactly the
+configured `:width` display columns, and caller styles survive: a section
+that already carries a foreground or attributes keeps them, while the base
+`:bg-color` and `:fg-color` fill only the keys it does not set.
 
 ### `statusbar`
 `(statusbar & options)`
@@ -189,17 +192,20 @@ Application status line with sections.
 Creates a status bar.
 
 **Options:**
-- `:left`: Left section content.
+- `:left`: Left section content (string or styled value).
 - `:center`: Center section content.
 - `:right`: Right section content.
-- `:bg-color`: Background color keyword.
-- `:fg-color`: Text color keyword.
+- `:width`: Total rendered width (default 80).
+- `:bg-color`: Background color keyword (default `:bright-black`).
+- `:fg-color`: Text color keyword (default `:white`).
 
 ### `render`
 `(render statusbar-state)`
 
-Renders the status bar string.
-
-The renderer strips ECMA-48 controls already present in section content and
-uses UTF-16 positions rather than terminal columns, so caller styling is
-discarded and wide Unicode content is not preserved reliably.
+Renders the status bar as a single string. Sections are measured, truncated,
+and padded in terminal columns through `limner.text`, so CJK and emoji content
+takes its true width and an OSC 8 hyperlink occupies no layout columns while
+remaining in the output. When the sections do not fit, the left and right
+sections are capped at two fifths of the bar each so the centre keeps a
+visible region; truncation uses the text layer's `…` ellipsis. An unsupported
+`:bg-color` or `:fg-color` throws `:limner.text.style/invalid-color`.

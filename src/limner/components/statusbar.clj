@@ -1,31 +1,21 @@
 (ns limner.components.statusbar
-  "Status bar component with left/center/right sections, like Claude Code"
-  (:require [limner.ansi :as ansi]
-            [limner.core :as core]))
+  "Sectioned status-bar rendering.
 
-;; ────────────────────── ANSI Background Colors ──────────────────────
-(def ^:private bg-colors
-  "ANSI background color codes"
-  {:black "\u001B[40m"
-   :red "\u001B[41m"
-   :green "\u001B[42m"
-   :yellow "\u001B[43m"
-   :blue "\u001B[44m"
-   :magenta "\u001B[45m"
-   :cyan "\u001B[46m"
-   :white "\u001B[47m"
-   :bright-black "\u001B[100m"
-   :bright-red "\u001B[101m"
-   :bright-green "\u001B[102m"
-   :bright-yellow "\u001B[103m"
-   :bright-blue "\u001B[104m"
-   :bright-magenta "\u001B[105m"
-   :bright-cyan "\u001B[106m"
-   :bright-white "\u001B[107m"})
+  The bar is one line of exactly the configured `:width` display columns.
+  Left, centre, and right sections are measured, truncated, and padded through
+  `limner.text`, so CJK, emoji, and text that already carries ANSI occupy
+  their true columns. Caller styles survive: the section spans keep their own
+  foreground and attributes, and `:bg-color`/`:fg-color` fill only the keys a
+  span does not set (REVIEW F9/B2/B3).
+
+  There is no private background-colour table or ANSI stripper; the colour
+  vocabulary is `limner.text.style`. An unsupported `:bg-color` or `:fg-color`
+  throws the `limner.text.style/invalid-color` class (ADR 0004)."
+  (:require [limner.text :as text]))
 
 ;; ────────────────────── Statusbar Component ──────────────────────
 (defn statusbar
-  "Create a statusbar component with left/center/right sections
+  "Create a statusbar component with left/center/right sections.
    Options:
    - :left - left section content (default \"\")
    - :center - center section content (default \"\")
@@ -49,150 +39,67 @@
    :fg-color fg-color})
 
 (defn update-section
-  "Update a specific section of the statusbar"
+  "Update a specific section of the statusbar."
   [statusbar section content]
   (assoc statusbar section content))
 
-;; ────────────────────── Text Truncation ──────────────────────
-(defn- truncate
-  "Truncate text to max-length, adding ellipsis if needed"
-  [text max-length]
-  (let [visible (core/visible-length text)]
-    (if (<= visible max-length)
-      text
-      ;; Strip ANSI codes, truncate, add ellipsis
-      (let [plain (ansi/strip text)
-            truncated (if (> max-length 3)
-                       (str (subs plain 0 (- max-length 3)) "...")
-                       (subs plain 0 max-length))]
-        truncated))))
+;; ────────────────────── Layout ──────────────────────
+(defn- layout-regions
+  "Return `[left-area center-area right-area]` widths that tile `:width`.
 
-;; ────────────────────── Layout Calculation ──────────────────────
-(defn- calculate-section-widths
-  "Calculate widths for left/center/right sections based on content and total width"
-  [left center right total-width]
-  (let [left-len (core/visible-length left)
-        center-len (core/visible-length center)
-        right-len (core/visible-length right)
-        total-content (+ left-len center-len right-len)]
+  When the content fits, the centre keeps all the space between the left and
+  right sections and centres within it. When it does not fit, the left and
+  right sections are capped at two fifths of the bar each so the centre keeps
+  a visible region instead of being squeezed out."
+  [width left-width center-width right-width]
+  (if (<= (+ left-width center-width right-width) width)
+    (let [left-area (min left-width width)
+          right-area (min right-width (- width left-area))]
+      [left-area (- width left-area right-area) right-area])
+    (let [cap (quot (* width 2) 5)
+          left-area (min left-width cap)
+          right-area (min right-width (min cap (- width left-area)))]
+      [left-area (max 0 (- width left-area right-area)) right-area])))
 
-    (cond
-      ;; All content fits - calculate spacing
-      (<= total-content total-width)
-      (let [;; For center to be truly centered, we need space on both sides
-            center-start (max left-len (/ (- total-width center-len) 2))
-            right-start (- total-width right-len)]
-        {:left-width left-len
-         :center-start (int center-start)
-         :center-width center-len
-         :right-start (int right-start)
-         :right-width right-len})
-
-      ;; Content too large - need to truncate
-      :else
-      (let [;; Allocate roughly 40% left, 20% center, 40% right
-            left-alloc (int (* total-width 0.4))
-            center-alloc (int (* total-width 0.2))
-            right-alloc (- total-width left-alloc center-alloc)
-
-            ;; But don't truncate if section is empty or shorter than allocation
-            left-final (min left-len left-alloc)
-            right-final (min right-len right-alloc)
-            center-final (min center-len (- total-width left-final right-final))
-
-            center-start (+ left-final (int (/ (- total-width left-final right-final center-final) 2)))]
-        {:left-width left-final
-         :center-start center-start
-         :center-width center-final
-         :right-start (- total-width right-final)
-         :right-width right-final}))))
-
-;; ────────────────────── Rendering ──────────────────────
-(defn- apply-fg-color
-  "Apply foreground color to text"
-  [color text]
-  (if (and color text (not= text ""))
-    (core/color color text)
-    text))
+(defn- base-style [{:keys [bg-color fg-color]}]
+  (cond-> {}
+    bg-color (assoc :bg bg-color)
+    fg-color (assoc :fg fg-color)))
 
 (defn render
-  "Render statusbar to string with background color and proper spacing"
-  [{:keys [left center right width bg-color fg-color] :as statusbar}]
-  (let [;; Strip any existing ANSI codes from content for accurate measurement
-        left-plain (ansi/strip left)
-        center-plain (ansi/strip center)
-        right-plain (ansi/strip right)
+  "Render the statusbar as one string of exactly `:width` display columns.
 
-        ;; Calculate layout
-        layout (calculate-section-widths left-plain center-plain right-plain width)
-
-        ;; Truncate sections if needed
-        left-text (truncate left-plain (:left-width layout))
-        center-text (truncate center-plain (:center-width layout))
-        right-text (truncate right-plain (:right-width layout))
-
-        ;; Build the statusbar with proper spacing
-        ;; Create array of spaces, then place sections
-        chars (vec (repeat width " "))
-
-        ;; Place left section
-        chars-with-left (reduce
-                         (fn [acc i]
-                           (if (< i (count left-text))
-                             (assoc acc i (str (nth left-text i)))
-                             acc))
-                         chars
-                         (range (count left-text)))
-
-        ;; Place center section
-        chars-with-center (reduce
-                           (fn [acc i]
-                             (let [char-idx (+ (:center-start layout) i)]
-                               (if (and (< i (count center-text))
-                                       (< char-idx width))
-                                 (assoc acc char-idx (str (nth center-text i)))
-                                 acc)))
-                           chars-with-left
-                           (range (count center-text)))
-
-        ;; Place right section
-        chars-with-right (reduce
-                          (fn [acc i]
-                            (let [char-idx (+ (:right-start layout) i)]
-                              (if (and (< i (count right-text))
-                                      (< char-idx width))
-                                (assoc acc char-idx (str (nth right-text i)))
-                                acc)))
-                          chars-with-center
-                          (range (count right-text)))
-
-        ;; Join characters
-        content (apply str chars-with-right)
-
-        ;; Apply foreground color if specified
-        colored-content (if fg-color
-                         (apply-fg-color fg-color content)
-                         content)
-
-        ;; Apply background color
-        bg-code (get bg-colors bg-color "")
-        reset "\u001B[0m"]
-
-    (str bg-code colored-content reset)))
+  Section text may be a string or a styled value. The base `:bg-color` and
+  `:fg-color` fill only the keys a section span does not already set, so a
+  caller's foreground and attributes survive composition."
+  [{:keys [left center right width] :as statusbar}]
+  (let [left-value (or left "")
+        center-value (or center "")
+        right-value (or right "")
+        [left-area center-area right-area]
+        (layout-regions width
+                        (text/width left-value)
+                        (text/width center-value)
+                        (text/width right-value))
+        left-region (text/pad-right (text/truncate left-value left-area) left-area)
+        center-region (text/center (text/truncate center-value center-area) center-area)
+        right-region (text/pad-left (text/truncate right-value right-area) right-area)
+        line (text/concat left-region center-region right-region)]
+    (text/to-ansi (text/style (base-style statusbar) line))))
 
 ;; ────────────────────── Helper Functions ──────────────────────
 (defn format-git-branch
-  "Format git branch name with icon"
+  "Format git branch name with icon."
   [branch-name]
   (str " " branch-name))
 
 (defn format-file-info
-  "Format file information (name, line, column)"
+  "Format file information (name, line, column)."
   [filename line column]
   (str filename " " line ":" column))
 
 (defn format-timestamp
-  "Format current timestamp"
+  "Format current timestamp."
   ([]
    (format-timestamp (java.time.LocalTime/now)))
   ([^java.time.LocalTime time]
@@ -202,6 +109,6 @@
      (format "%02d:%02d:%02d" hour minute second))))
 
 (defn format-keybinding
-  "Format a keybinding hint"
+  "Format a keybinding hint."
   [key description]
   (str key " " description))

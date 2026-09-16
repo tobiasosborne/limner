@@ -159,6 +159,12 @@ The following functions changed their error behaviour:
 - Gave the `:square` spinner style its own frames and built progress-bar fills
   and the dim pulse through `limner.text`, so a bar keeps its width and a dim
   pulse keeps its colour (REVIEW F4/B1).
+- Made `limner.components.statusbar` render one exact-width line through
+  `limner.text`, preserving each section's foreground and attributes while the
+  base colours fill only absent keys. It removes the private background table
+  and ANSI stripper, measures CJK and emoji in columns, and keeps OSC 8
+  hyperlinks in the output without counting their controls (REVIEW F9/B2/B3).
+  Truncation now uses the text layer's `…` ellipsis.
 - Made `limner.render/buffer-stats` count a wide grapheme once rather than
   counting its continuation as a second non-empty cell.
 - Removed every JVM reflection warning from `src/` with explicit type hints

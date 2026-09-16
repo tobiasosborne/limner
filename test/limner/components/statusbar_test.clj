@@ -1,9 +1,14 @@
 (ns limner.components.statusbar-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
             [limner.ansi :as ansi]
+            [limner.component-support :as component]
             [limner.components.statusbar :as statusbar]
             [limner.core :as core]
-            [clojure.string :as str]))
+            [limner.text :as text]))
 
 ;; ────────────────────── Statusbar Creation Tests ──────────────────────
 (deftest test-statusbar-creation
@@ -91,19 +96,56 @@
           visible (core/visible-length rendered)]
       (is (<= visible 30))))
 
-  (testing "Truncation adds ellipsis"
+  (testing "Truncation adds an ellipsis"
     (let [bar (statusbar/statusbar :left "This is a very long message"
                                    :width 15)
           rendered (statusbar/render bar)
           plain (ansi/strip rendered)]
-      (is (str/includes? plain "...")))))
+      (is (str/includes? plain "…")))))
+
+(deftest caller-styles-and-wide-sections
+  (testing "A caller foreground survives composition"
+    (component/assert-lines
+     ["\u001B[31mX\u001B[39m   "]
+     [(statusbar/render (statusbar/statusbar
+                         :left (core/color :red "X")
+                         :width 4 :bg-color nil :fg-color nil))]))
+  (testing "A caller foreground wins over the bar's default foreground"
+    (let [spans (text/from-ansi
+                 (statusbar/render
+                  (statusbar/statusbar :left (core/color :red "Error")
+                                       :width 20 :bg-color nil :fg-color :white)))
+          red (first (filter #(= "Error" (:text %)) spans))]
+      (is (= :red (:fg (:style red))))))
+  (testing "CJK, an emoji ZWJ sequence, and a styled section fit exactly"
+    (component/assert-lines
+     ["日本    👩‍🔬     \u001B[31mR\u001B[0m"]
+     [(statusbar/render (statusbar/statusbar
+                         :left "日本" :center "👩‍🔬"
+                         :right (core/color :red "R")
+                         :width 16 :bg-color nil :fg-color nil))])))
+
+(deftest statusbar-width-property
+  (testing "Every statusbar is exactly its requested width"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [left component/line-gen
+                                 center component/line-gen
+                                 right component/line-gen
+                                 width (gen/choose 1 40)]
+                    (= width (text/width
+                              (statusbar/render
+                               (statusbar/statusbar :left left :center center
+                                                    :right right :width width))))))]
+      (is (:pass? result) (pr-str result)))))
 
 (deftest non-sgr-controls-do-not-enter-statusbar-layout
-  (is (= "link    \u001B[0m"
-         (statusbar/render
-          (statusbar/statusbar
-           :left "\u001B]8;;https://x\u001B\\link\u001B]8;;\u001B\\"
-           :width 8 :bg-color nil :fg-color nil)))))
+  (testing "An OSC 8 hyperlink occupies no layout columns but survives"
+    (is (= "\u001B]8;;https://x\u001B\\link\u001B]8;;\u001B\\    "
+           (statusbar/render
+            (statusbar/statusbar
+             :left "\u001B]8;;https://x\u001B\\link\u001B]8;;\u001B\\"
+             :width 8 :bg-color nil :fg-color nil))))))
 
 ;; ────────────────────── Background Color Tests ──────────────────────
 (deftest test-background-colors
