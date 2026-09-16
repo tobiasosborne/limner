@@ -64,5 +64,8 @@ Invalid input throws `ex-info` with an ADR 0004 `:limner/error` class:
 
 ## Deprecated compatibility
 
-`limner/table` delegates to `limner.table/table` and is deprecated; require
-`limner.table` directly.
+`limner/table` delegates to `limner.table/table` with right alignment and is
+deprecated; require `limner.table` directly. For compatibility it retains the
+legacy return type: one newline-terminated string rather than the focused
+namespace's vector of lines. Ragged rows now propagate
+`:limner.table/ragged-rows` instead of drawing malformed output.

@@ -82,12 +82,21 @@ The following functions changed their error behaviour:
   `:width` as total rendered width including the border, rather than allowing
   the border to add columns. Borderless input labels render inline, and a
   multiline input without a status no longer adds an empty status row.
+- `limner.components.panel` now treats `:width` as the total width including
+  its border; expanded panels previously ignored it and collapsed panels used
+  it as a content width. Values below four now throw the documented component
+  error.
 - `limner.components.progress` `:square` spinner frames changed from the
   `:box` glyphs to distinct quadrant blocks, so every named style animates
   differently (REVIEW F4).
 - `limner.components.progress/progress-bar` rejects non-integer or negative
   widths and zero-width fill patterns with namespaced `ex-info` instead of
   rendering the wrong geometry or failing in arithmetic.
+- List and status-bar truncation now use the single-character ellipsis `…`
+  from `limner.text` instead of three ASCII dots.
+- Deprecated `limner/table` retains its newline-terminated string return and
+  right alignment, but ragged rows now throw `:limner.table/ragged-rows` and
+  `:header? false` no longer duplicates the first row.
 
 ### Added
 

@@ -33,11 +33,13 @@
 (defn table
   "DEPRECATED: use `limner.table/table`.
 
-  Kept for compatibility; delegates to `limner.table` with the same
-  rectangular-row validation and column-correct alignment."
+  Kept for compatibility: delegates to `limner.table` with right alignment,
+  then returns the historical newline-terminated string. Rectangular-row
+  validation is shared with the focused namespace."
   {:deprecated "0.2.0"}
   [rows & {:keys [header?] :or {header? true}}]
-  (limner-table/table rows :header? header?))
+  (str (str/join "\n" (limner-table/table rows :header? header? :align :right))
+       "\n"))
 
 ;; ────────────────────── Spinner ──────────────────────
 (def spinner-frames ["⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏"])

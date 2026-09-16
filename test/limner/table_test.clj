@@ -5,6 +5,7 @@
             [clojure.test.check.properties :as prop]
             [limner.component-support :as component]
             [limner.core :as core]
+            [limner :as legacy]
             [limner.table :as table]
             [limner.text :as text]))
 
@@ -87,6 +88,21 @@
       "│ a │"
       "└───┘"]
      (table/table [["a"]]))))
+
+(deftest deprecated-table-preserves-its-string-contract
+  (testing "The compatibility wrapper remains newline-terminated and right-aligned"
+    (is (= (str "┌─────┬────┐\n"
+                "│   a │ bb │\n"
+                "├─────┼────┤\n"
+                "│ ccc │  d │\n"
+                "└─────┴────┘\n")
+           (legacy/table [["a" "bb"] ["ccc" "d"]]))))
+  (testing "header? false renders each input row once"
+    (is (= (str "┌───┐\n"
+                "│ a │\n"
+                "│ b │\n"
+                "└───┘\n")
+           (legacy/table [["a"] ["b"]] :header? false)))))
 
 (deftest ragged-rows-throw
   (testing "A row with the wrong number of cells throws with a hint"
