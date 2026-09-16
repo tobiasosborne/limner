@@ -30,3 +30,12 @@ this brief. Nothing outside that range is in scope.
 
 Final report: the defects found (with severity), what you fixed (commit
 SHAs), what you left open (bead IDs), and `bb check` counts on both runtimes.
+
+## Range and extras
+
+`BASE` is `5b386d8`. The worker's report is `reports/R4-phase2a.report.md`.
+
+Two small items the worker flagged and left, which you should do:
+- `CLAUDE.md` practical guidance still says loading every namespace printed
+  18 reflection warnings; it is now zero. Correct that one line.
+- Leave `reviews/2026-09-15/evidence/probe.clj` untouched; it is frozen.
