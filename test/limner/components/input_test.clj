@@ -1,7 +1,12 @@
 (ns limner.components.input-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
+            [limner.component-support :as component]
             [limner.components.input :as input]
-            [clojure.string :as str]))
+            [limner.text :as text]))
 
 ;; ────────────────────── Input Creation Tests ──────────────────────
 (deftest test-input-creation
@@ -377,6 +382,71 @@
           ;; Navigate forward
           (let [i5 (input/history-next i4)]
             (is (= "second command" (:value i5)))))))))
+
+;; ────────────────────── Grapheme cursor and rendering ──────────────────────
+(deftest grapheme-cursor-operations
+  (testing "Cursor positions count grapheme clusters, not UTF-16 units"
+    (let [i (input/input :value "a👩‍🔬b")]
+      (is (= 3 (:cursor i)))
+      (is (= 2 (:cursor (input/move-left i 1))))
+      (is (= 0 (:cursor (input/move-home i))))
+      (is (= 3 (:cursor (input/move-end i))))))
+  (testing "Backspace deletes a whole emoji cluster"
+    (let [updated (input/backspace (input/input :value "a👩‍🔬" :cursor 2))]
+      (is (= "a" (:value updated)))
+      (is (= 1 (:cursor updated)))))
+  (testing "Delete removes a whole emoji cluster"
+    (let [updated (input/delete-char (input/input :value "a👩‍🔬b" :cursor 1))]
+      (is (= "ab" (:value updated)))))
+  (testing "Insert never lands inside a cluster"
+    (let [updated (input/insert-char (input/input :value "a👩‍🔬" :cursor 1) "X")]
+      (is (= "aX👩‍🔬" (:value updated)))
+      (is (= 2 (:cursor updated))))))
+
+(deftest history-prev-is-total
+  (testing "An empty history returns the input unchanged"
+    (let [i (input/input :value "typed")]
+      (is (= i (input/history-prev i))))))
+
+(deftest placeholder-cursor-golden
+  (testing "The placeholder cursor never embeds a raw escape in the colour span"
+    (component/assert-lines
+     [" \u001B[7;36mT\u001B[27mype here\u001B[39m          "]
+     (input/render (input/input :placeholder "Type here" :border false :width 20)))))
+
+(deftest trailing-newline-cursor-golden
+  (testing "A value ending in a newline puts the cursor on the new empty line"
+    (component/assert-lines
+     ["abc     "
+      "\u001B[7m \u001B[27m       "
+      "        "]
+     (input/render (input/input :multiline true :value "abc\n"
+                                :height 3 :border false :width 8)))))
+
+(deftest every-input-line-has-requested-width
+  (testing "Generated single-line inputs keep one exact width per line"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [value component/line-gen
+                                 width (gen/choose 10 30)]
+                    (let [rendered (input/render
+                                    (input/input :value value :width width :border false))]
+                      (and (seq rendered)
+                           (every? #(= width (text/width %)) rendered)))))]
+      (is (:pass? result) (pr-str result))))
+  (testing "Generated multiline inputs keep one exact width per line"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [lines (gen/vector component/line-gen 1 4)
+                                 width (gen/choose 10 30)
+                                 height (gen/choose 1 4)]
+                    (let [rendered (input/render
+                                    (input/input :multiline true
+                                                 :value (str/join "\n" lines)
+                                                 :height height :width width :border false))]
+                      (and (seq rendered)
+                           (every? #(= width (text/width %)) rendered)))))]
+      (is (:pass? result) (pr-str result)))))
 
 ;; Run all tests
 (defn run-tests []

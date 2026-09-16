@@ -125,7 +125,8 @@
     "src/limner/borders/effects.clj"
     "src/limner/layout.clj"
     "src/limner/table.clj"
-    "src/limner/components/list.clj"})
+    "src/limner/components/list.clj"
+    "src/limner/components/input.clj"})
 
 (def ^:private banned-text-symbols
   "Symbols whose UTF-16 semantics must not appear in a component namespace."
@@ -160,7 +161,13 @@
    "Table indexes its per-column width vector; cells use limner.text."
 
    ["src/limner/components/list.clj" 'count]
-   "List counts items and viewport rows; labels are measured by limner.text."})
+   "List counts items and viewport rows; labels are measured by limner.text."
+
+   ["src/limner/components/input.clj" 'count]
+   "Input counts grapheme units and history entries; boundaries come from limner.text."
+
+   ["src/limner/components/input.clj" 'nth]
+   "Input indexes its own grapheme-unit vector; text is sliced by limner.text."})
 
 (defn- banned-use [form]
   (cond

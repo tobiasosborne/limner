@@ -1,18 +1,39 @@
 (ns limner.components.input
-  "Input component - interactive text input fields"
+  "Editable text input state and rendering.
+
+  The cursor is a grapheme index, not a UTF-16 offset, so moving left or right
+  and inserting or deleting never splits an emoji or a combining sequence.
+  Editing uses `limner.text/clusters` for boundaries and `limner.text` spans
+  for rendering, so a placeholder keeps its colour while the inverse-video
+  cursor is a real style attribute rather than an escape embedded in a
+  substring (REVIEW F1/B1/B3).
+
+  Input values are plain text. `:width` is the total rendered width including
+  the border; every rendered line is exactly that many display columns."
   (:refer-clojure :exclude [empty?])
   (:require [clojure.string :as str]
             [limner.borders :as borders]
-            [limner.core :as core]))
+            [limner.core :as core]
+            [limner.text :as text]))
+
+(defn- cluster-count
+  "Number of grapheme clusters in plain text."
+  [s]
+  (count (text/clusters s)))
+
+(defn- grapheme-slice
+  "Plain text from grapheme index `start` (inclusive) to `end` (exclusive)."
+  [s start end]
+  (apply str (map :cluster (subvec (text/clusters s) start end))))
 
 ;; ────────────────────── Input State ──────────────────────
 (defn input
-  "Create an input component
+  "Create an input component.
    Options:
    - :value - current text value (string, default \"\")
-   - :cursor - cursor position (default at end of value)
+   - :cursor - cursor position in grapheme clusters (default at end of value)
    - :multiline - enable multi-line input (default false)
-   - :width - input width (default 40)
+   - :width - total rendered width (default 40)
    - :height - input height for multiline (default 1)
    - :placeholder - placeholder text when empty (default \"\")
    - :masked - mask input (for passwords, default false)
@@ -22,7 +43,7 @@
    - :disabled - whether input is disabled (default false)
    - :history - command history vector (default [])
    - :history-index - current position in history (default nil)
-   - :max-length - maximum input length (default nil)
+   - :max-length - maximum input length in grapheme clusters (default nil)
    - :border - show border around input (default true)
    - :border-style - border style (default :single)
    - :label - input label (default nil)"
@@ -42,7 +63,7 @@
            max-length nil
            border true
            border-style :single}}]
-  (let [cursor-pos (if (nil? cursor) (count value) cursor)]
+  (let [cursor-pos (if (nil? cursor) (cluster-count value) cursor)]
     {:value value
      :cursor cursor-pos
      :multiline multiline
@@ -63,125 +84,117 @@
 
 ;; ────────────────────── Text Manipulation ──────────────────────
 (defn insert-char
-  "Insert character at cursor position"
+  "Insert `ch` (one grapheme or more) at the cursor, bounded by `:max-length`."
   [input-state ch]
-  (let [{:keys [value cursor max-length]} input-state]
-    (if (and max-length (>= (count value) max-length))
+  (let [{:keys [value cursor max-length]} input-state
+        total (cluster-count value)
+        cursor (max 0 (min cursor total))]
+    (if (and max-length (>= total max-length))
       input-state
-      (let [before (subs value 0 cursor)
-            after (subs value cursor)
-            new-value (str before ch after)]
-        (assoc input-state
-               :value new-value
-               :cursor (inc cursor))))))
+      (assoc input-state
+             :value (str (grapheme-slice value 0 cursor) ch (grapheme-slice value cursor total))
+             :cursor (+ cursor (cluster-count ch))))))
 
 (defn delete-char
-  "Delete character at cursor position (Delete key)"
+  "Delete the grapheme cluster at the cursor (Delete key)."
   [input-state]
-  (let [{:keys [value cursor]} input-state]
-    (if (>= cursor (count value))
+  (let [{:keys [value cursor]} input-state
+        total (cluster-count value)
+        cursor (max 0 (min cursor total))]
+    (if (>= cursor total)
       input-state
-      (let [before (subs value 0 cursor)
-            after (subs value (inc cursor))
-            new-value (str before after)]
-        (assoc input-state :value new-value)))))
+      (assoc input-state
+             :value (str (grapheme-slice value 0 cursor)
+                         (grapheme-slice value (inc cursor) total))))))
 
 (defn backspace
-  "Delete character before cursor (Backspace key)"
+  "Delete the grapheme cluster before the cursor (Backspace key)."
   [input-state]
-  (let [{:keys [value cursor]} input-state]
+  (let [{:keys [value cursor]} input-state
+        total (cluster-count value)
+        cursor (max 0 (min cursor total))]
     (if (<= cursor 0)
       input-state
-      (let [before (subs value 0 (dec cursor))
-            after (subs value cursor)
-            new-value (str before after)]
-        (assoc input-state
-               :value new-value
-               :cursor (dec cursor))))))
+      (assoc input-state
+             :value (str (grapheme-slice value 0 (dec cursor))
+                         (grapheme-slice value cursor total))
+             :cursor (dec cursor)))))
 
 (defn clear
-  "Clear input value"
+  "Clear input value."
   [input-state]
-  (assoc input-state
-         :value ""
-         :cursor 0))
+  (assoc input-state :value "" :cursor 0))
 
 ;; ────────────────────── Cursor Movement ──────────────────────
 (defn move-cursor
-  "Move cursor to position (clamped to valid range)"
+  "Move cursor to `pos`, clamped to the grapheme count."
   [input-state pos]
-  (let [{:keys [value]} input-state
-        clamped (max 0 (min pos (count value)))]
-    (assoc input-state :cursor clamped)))
+  (assoc input-state :cursor (max 0 (min pos (cluster-count (:value input-state))))))
 
 (defn move-left
-  "Move cursor left by n positions"
+  "Move cursor left by `n` grapheme clusters."
   [input-state n]
   (move-cursor input-state (- (:cursor input-state) n)))
 
 (defn move-right
-  "Move cursor right by n positions"
+  "Move cursor right by `n` grapheme clusters."
   [input-state n]
   (move-cursor input-state (+ (:cursor input-state) n)))
 
 (defn move-home
-  "Move cursor to start of line"
+  "Move cursor to the start of the line."
   [input-state]
   (assoc input-state :cursor 0))
 
 (defn move-end
-  "Move cursor to end of line"
+  "Move cursor past the last grapheme cluster."
   [input-state]
-  (assoc input-state :cursor (count (:value input-state))))
+  (assoc input-state :cursor (cluster-count (:value input-state))))
 
 ;; ────────────────────── History Navigation ──────────────────────
 (defn add-to-history
-  "Add current value to history"
+  "Add the current value to history, ignoring blanks and repeats."
   [input-state]
   (let [{:keys [value history]} input-state]
     (if (and (not (str/blank? value))
              (not= value (last history)))
-      (assoc input-state
-             :history (conj history value)
-             :history-index nil)
+      (assoc input-state :history (conj history value) :history-index nil)
       input-state)))
 
 (defn history-prev
-  "Navigate to previous history entry (up arrow)"
+  "Navigate to the previous history entry; an empty history is unchanged."
   [input-state]
   (let [{:keys [history history-index]} input-state]
-    (when-not (clojure.core/empty? history)
+    (if (clojure.core/empty? history)
+      input-state
       (let [current-idx (or history-index (count history))
             new-idx (max 0 (dec current-idx))]
         (if (< new-idx (count history))
           (let [historic-value (get history new-idx)]
             (assoc input-state
                    :value historic-value
-                   :cursor (count historic-value)
+                   :cursor (cluster-count historic-value)
                    :history-index new-idx))
           input-state)))))
 
 (defn history-next
-  "Navigate to next history entry (down arrow)"
+  "Navigate to the next history entry."
   [input-state]
   (let [{:keys [history history-index]} input-state]
     (if (nil? history-index)
       input-state
       (let [new-idx (inc history-index)]
         (if (>= new-idx (count history))
-          (assoc input-state
-                 :value ""
-                 :cursor 0
-                 :history-index nil)
+          (assoc input-state :value "" :cursor 0 :history-index nil)
           (let [historic-value (get history new-idx)]
             (assoc input-state
                    :value historic-value
-                   :cursor (count historic-value)
+                   :cursor (cluster-count historic-value)
                    :history-index new-idx)))))))
 
 ;; ────────────────────── Validation ──────────────────────
 (defn validate
-  "Validate current value using validator function"
+  "Validate the current value with the validator, setting `:invalid`."
   [input-state]
   (let [{:keys [validator value]} input-state]
     (if validator
@@ -189,175 +202,189 @@
       input-state)))
 
 (defn valid?
-  "Check if current value is valid"
+  "True when the input is not marked invalid."
   [input-state]
   (not (:invalid input-state)))
 
 ;; ────────────────────── Display Formatting ──────────────────────
 (defn format-display-value
-  "Format value for display (handle masking)"
+  "Format the value for display: a coloured placeholder or a mask.
+
+  Returns a string, as before, so existing callers are unaffected. Rendering
+  parses it back into spans through `limner.text`."
   [{:keys [value masked mask-char placeholder]}]
   (cond
     (and (str/blank? value) (not (str/blank? placeholder)))
     (core/color :cyan placeholder)
 
     masked
-    (apply str (repeat (count value) mask-char))
+    (apply str (repeat (cluster-count value) mask-char))
 
-    :else
-    value))
+    :else value))
 
 (defn format-line-with-cursor
-  "Format a line with cursor indicator"
-  [text cursor-pos width show-cursor?]
-  (let [visible-start (max 0 (- cursor-pos (- width 5)))
-        visible-end (min (count text) (+ visible-start width))
-        visible-text (subs text visible-start visible-end)
-        cursor-in-view (- cursor-pos visible-start)
+  "Render one line of `display` in `width` columns with a cursor at `cursor-pos`.
 
-        ;; Pad to width
-        padded (if (< (core/visible-length visible-text) width)
-                 (str visible-text (apply str (repeat (- width (core/visible-length visible-text)) " ")))
-                 visible-text)
-
-        ;; Add cursor if in view
-        display-text (if (and show-cursor?
-                            (>= cursor-in-view 0)
-                            (<= cursor-in-view (count visible-text)))
-                      (let [before (subs padded 0 cursor-in-view)
-                            cursor-char (if (< cursor-in-view (count visible-text))
-                                         (subs padded cursor-in-view (inc cursor-in-view))
-                                         " ")
-                            after (if (< (inc cursor-in-view) (count padded))
-                                   (subs padded (inc cursor-in-view))
-                                   "")]
-                        (str before (core/color :reset (str "\u001B[7m" cursor-char "\u001B[27m")) after))
-                      padded)]
-    display-text))
+  The cursor is the grapheme at that index tinted with the inverse attribute;
+  it inherits the grapheme's colour, and it is a span, never an escape spliced
+  into the middle of another escape. A wide cursor that would cross the right
+  edge becomes an inverse space. `display` may be an ANSI string or a styled
+  value. The result is exactly `width` display columns."
+  [display cursor-pos width show-cursor?]
+  (let [width (max 0 width)
+        units (text/clusters display)
+        n (count units)]
+    (if-not show-cursor?
+      (text/to-ansi (text/pad-right (text/slice-columns display 0 width) width))
+      (let [cursor (max 0 (min cursor-pos n))
+            cursor-col (reduce + 0 (map :width (subvec units 0 cursor)))
+            start-col (if (>= cursor-col width) (max 0 (- cursor-col (dec width))) 0)
+            sliced (text/slice-columns display start-col (+ start-col width))
+            sliced-width (text/width sliced)
+            rel (- cursor-col start-col)
+            cursor-unit (when (< cursor n) (nth units cursor))
+            cursor-width (or (:width cursor-unit) 1)
+            cursor-cluster (or (:cluster cursor-unit) " ")
+            fits? (<= (+ rel cursor-width) width)
+            before (text/slice-columns sliced 0 (min rel sliced-width))
+            after-start (min (if fits? (+ rel cursor-width) rel) sliced-width)
+            after (text/slice-columns sliced after-start sliced-width)
+            cursor-cell (text/concat
+                         [{:text (if fits? cursor-cluster " ")
+                           :style (assoc (or (:style cursor-unit) {}) :inverse true)}])
+            body (text/concat before cursor-cell after)]
+        (text/to-ansi (text/pad-right body width))))))
 
 ;; ────────────────────── Rendering ──────────────────────
+(defn- content-columns [input-state]
+  (max 0 (- (:width input-state) (if (:border input-state) 4 0))))
+
+(defn- status-text [{:keys [disabled invalid]}]
+  (cond
+    disabled (core/color :cyan " ⊘")
+    invalid (core/color :red " ✗")
+    :else ""))
+
+(defn- pad-line [line columns]
+  (text/to-ansi (text/pad-right (text/slice-columns line 0 columns) columns)))
+
 (defn render-single-line
-  "Render single-line input"
-  [{:keys [width disabled invalid label] :as input-state}]
-  (let [display-value (format-display-value input-state)
-        cursor-pos (:cursor input-state)
-        show-cursor? (not disabled)
-        content-line (format-line-with-cursor display-value cursor-pos (- width 2) show-cursor?)
+  "Render a single-line input as one line of the configured width."
+  [{:keys [border label] :as input-state}]
+  (let [columns (content-columns input-state)
+        status (status-text input-state)
+        prefix (if (and label (not border)) (str label ": ") "")
+        field (max 0 (- columns 1 (text/width prefix) (text/width status)))
+        cursor-line (format-line-with-cursor (format-display-value input-state)
+                                             (:cursor input-state)
+                                             field
+                                             (not (:disabled input-state)))]
+    [(text/to-ansi (text/concat " " prefix cursor-line status))]))
 
-        ;; Add status indicator
-        status-char (cond
-                     disabled " ⊘"
-                     invalid (core/color :red " ✗")
-                     :else "")
-
-        final-line (str " " content-line status-char)]
-
-    (if label
-      [(str label ":") final-line]
-      [final-line])))
+(defn- cursor-location
+  "Return `[line grapheme-column]` for grapheme cursor `cursor` in `value`."
+  [value cursor]
+  (loop [units (seq (text/clusters value)), idx 0, line 0, col 0]
+    (if (or (nil? units) (= idx cursor))
+      [line col]
+      (let [cluster (:cluster (first units))]
+        (if (#{"\n" "\r\n"} cluster)
+          (recur (next units) (inc idx) (inc line) 0)
+          (recur (next units) (inc idx) line (inc col)))))))
 
 (defn render-multiline
-  "Render multi-line input (text area)"
-  [{:keys [width height disabled invalid] :as input-state}]
-  (let [value (:value input-state)
-        lines (str/split-lines value)
-        cursor-pos (:cursor input-state)
+  "Render a multiline input as `:height` rows, scrolling to the cursor row.
 
-        ;; Calculate which line the cursor is on
-        chars-before-cursor (subs value 0 cursor-pos)
-        cursor-line-idx (count (str/split-lines chars-before-cursor))
-        cursor-line (dec cursor-line-idx)
-        cursor-col (- cursor-pos (count (str/join "\n" (take cursor-line lines))) (if (pos? cursor-line) 1 0))
-
-        ;; Pad lines to height
-        padded-lines (take height (concat lines (repeat "")))
-
-        ;; Format each line with cursor if applicable
-        formatted-lines (map-indexed
-                         (fn [idx line]
-                           (if (and (= idx cursor-line) (not disabled))
-                             (str " " (format-line-with-cursor line cursor-col (- width 4) true) " ")
-                             (str " " line (apply str (repeat (- width (count line) 4) " ")) " ")))
-                         padded-lines)
-
-        ;; Add status indicator to last line
+  A trailing newline opens a new empty row with the cursor at its start; it
+  does not add a second stray row. A status row is only emitted when the input
+  is disabled or invalid."
+  [{:keys [disabled height] :as input-state}]
+  (let [columns (content-columns input-state)
+        value (:value input-state)
+        lines (vec (text/lines value))
+        [cursor-line cursor-col] (cursor-location value (:cursor input-state))
+        offset (max 0 (- cursor-line (dec (max 1 height))))
+        padded (vec (take height (drop offset (concat lines (repeat "")))))
+        rendered (map-indexed
+                  (fn [idx line]
+                    (if (and (= (+ offset idx) cursor-line) (not disabled))
+                      (format-line-with-cursor line cursor-col columns true)
+                      (pad-line line columns)))
+                  padded)
         status (cond
-                disabled (core/color :cyan " [DISABLED]")
-                invalid (core/color :red " [INVALID]")
-                :else "")]
-
-    (vec (concat formatted-lines [status]))))
+                 disabled (core/color :cyan "⊘ disabled")
+                 (:invalid input-state) (core/color :red "✗ invalid")
+                 :else nil)
+        status-line (when status (pad-line status columns))]
+    (vec (concat rendered (when status-line [status-line])))))
 
 (defn render
-  "Render input component to vector of strings"
+  "Render an input component to a vector of strings.
+
+  Every returned line is exactly `:width` display columns wide, including the
+  border. A label is drawn in the border when there is one, and inline
+  otherwise."
   [{:keys [multiline border border-style label] :as input-state}]
   (let [content-lines (if multiline
-                       (render-multiline input-state)
-                       (render-single-line input-state))
-
-        ;; Add border if requested
+                        (render-multiline input-state)
+                        (render-single-line input-state))
         final-lines (if border
-                     (if label
-                       (borders/draw-titled-box label content-lines
-                                               :border-style border-style
-                                               :title-pos :left)
-                       (borders/draw-box content-lines :border-style border-style))
-                     content-lines)]
-
+                      (if label
+                        (borders/draw-titled-box label content-lines
+                                                :border-style border-style
+                                                :title-pos :left)
+                        (borders/draw-box content-lines :border-style border-style))
+                      content-lines)]
     (vec final-lines)))
 
 (defn render-to-string
-  "Render input to a single string with newlines"
+  "Render input to a single string with newlines."
   [input-state]
   (str/join "\n" (render input-state)))
 
 ;; ────────────────────── Input Helpers ──────────────────────
 (defn input?
-  "Check if value is an input component"
+  "Check if value is an input component."
   [x]
-  (and (map? x)
-       (contains? x :cursor)
-       (contains? x :value)))
+  (and (map? x) (contains? x :cursor) (contains? x :value)))
 
 (defn empty?
-  "Check if input value is empty"
+  "Check if input value is empty."
   [input-state]
   (str/blank? (:value input-state)))
 
 (defn disabled?
-  "Check if input is disabled"
+  "Check if input is disabled."
   [input-state]
   (:disabled input-state))
 
 (defn multiline?
-  "Check if input is multiline"
+  "Check if input is multiline."
   [input-state]
   (:multiline input-state))
 
 (defn at-start?
-  "Check if cursor is at start"
+  "Check if cursor is at start."
   [input-state]
   (zero? (:cursor input-state)))
 
 (defn at-end?
-  "Check if cursor is at end"
+  "Check if cursor is at the end."
   [input-state]
-  (= (:cursor input-state) (count (:value input-state))))
+  (= (:cursor input-state) (cluster-count (:value input-state))))
 
 ;; ────────────────────── Convenience Functions ──────────────────────
 (defn set-value
-  "Set input value and move cursor to end"
+  "Set input value and move cursor to the end."
   [input-state value]
-  (assoc input-state
-         :value value
-         :cursor (count value)))
+  (assoc input-state :value value :cursor (cluster-count value)))
 
 (defn toggle-disabled
-  "Toggle disabled state"
+  "Toggle disabled state."
   [input-state]
   (update input-state :disabled not))
 
 (defn focus
-  "Focus input (move cursor to end)"
+  "Focus input (move cursor to end)."
   [input-state]
   (move-end input-state))

@@ -40,8 +40,15 @@ Embeds child panels inside a parent panel.
 `limner.components.input`
 
 Editable input state and rendering helpers. The namespace does not read
-terminal input or connect itself to the event system. Cursor positions and
-editing operations currently use UTF-16 indexes rather than grapheme clusters.
+terminal input or connect itself to the event system. Cursor positions are
+grapheme-cluster indexes, so editing never splits an emoji or a combining
+sequence. Rendering goes through `limner.text`, and every rendered line is
+exactly the configured `:width` including the border, so a coloured
+placeholder keeps its colour while the cursor is an inverse-video span.
+
+When the value is empty and a `:placeholder` is set, the cursor sits on the
+first placeholder grapheme. A multiline value ending in a newline opens a new
+empty row with the cursor at its start; it does not add a stray row.
 
 ### `input`
 `(input & options)`
@@ -50,11 +57,12 @@ Creates an input component.
 
 **Options:**
 - `:value`: Current text.
-- `:cursor`: Cursor position.
-- `:width`: Field width.
+- `:cursor`: Cursor position in grapheme clusters (default at the end).
+- `:width`: Total rendered width including the border (default 40).
 - `:placeholder`: Text to show when empty.
 - `:masked`: Boolean (e.g., for passwords).
 - `:multiline`: Enable textarea mode.
+- `:max-length`: Maximum value length in grapheme clusters.
 - `:validator`: Function `(fn [val] -> bool)`.
 
 ### Text Manipulation
@@ -63,6 +71,8 @@ Creates an input component.
 - `(backspace state)`
 - `(move-cursor state pos)`
 - `(validate state)`
+
+`history-prev` returns the input unchanged when the history is empty.
 
 ---
 

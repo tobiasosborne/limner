@@ -70,6 +70,10 @@ The following functions changed their error behaviour:
   continuations, and dirty-region grouping is a strict linear pass.
   `limner.render` is experimental; the changes are listed here so callers can
   migrate.
+- `limner.components.input` `:cursor` is now a grapheme-cluster index rather
+  than a UTF-16 offset. For text without emoji or combining sequences the two
+  agree; for other text the index changes meaning. `:max-length` likewise
+  counts grapheme clusters.
 
 ### Added
 
@@ -141,6 +145,12 @@ The following functions changed their error behaviour:
 - Made `select-next` and `select-prev` adjust the scroll offset to keep the
   selection visible, and made `set-filter` reset both selection and scroll in
   every branch (REVIEW F2).
+- Made `limner.components.input` move, insert, delete, and backspace by
+  grapheme cluster through `limner.text`, made `history-prev` return the input
+  unchanged when the history is empty, and rendered the inverse-video cursor
+  as a style span instead of an escape spliced into a coloured placeholder.
+  A multiline value ending in a newline now puts the cursor on the new empty
+  row without adding a stray row (REVIEW F1/B1/B3).
 - Made `limner.render/buffer-stats` count a wide grapheme once rather than
   counting its continuation as a second non-empty cell.
 - Removed every JVM reflection warning from `src/` with explicit type hints
