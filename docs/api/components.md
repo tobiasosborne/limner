@@ -141,6 +141,12 @@ Parses and renders Markdown text.
 
 Progress bars, spinners, and activity indicators.
 
+Completion is numeric: a progress bar is complete when its value is at least
+100, so `100` and `100.0` agree. Every named `spinner-styles` entry has its
+own frame sequence. Bar fills and the dim pulse compose through
+`limner.text`, so a determinate bar is exactly `:width` display columns and a
+dim pulse keeps its colour.
+
 ### `progress-bar`
 `(progress-bar & options)`
 
@@ -148,8 +154,9 @@ Creates a progress bar.
 
 **Options:**
 - `:value`: 0-100.
-- `:width`: Character width.
+- `:width`: Total rendered width in character columns.
 - `:type`: `:determinate` or `:indeterminate`.
+- `:show-percentage`: Show the right-aligned percentage label (default true).
 
 ### `spinner`
 `(spinner & options)`

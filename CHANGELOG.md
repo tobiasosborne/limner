@@ -74,6 +74,9 @@ The following functions changed their error behaviour:
   than a UTF-16 offset. For text without emoji or combining sequences the two
   agree; for other text the index changes meaning. `:max-length` likewise
   counts grapheme clusters.
+- `limner.components.progress` `:square` spinner frames changed from the
+  `:box` glyphs to distinct quadrant blocks, so every named style animates
+  differently (REVIEW F4).
 
 ### Added
 
@@ -151,6 +154,11 @@ The following functions changed their error behaviour:
   as a style span instead of an escape spliced into a coloured placeholder.
   A multiline value ending in a newline now puts the cursor on the new empty
   row without adding a stray row (REVIEW F1/B1/B3).
+- Made `limner.components.progress/complete?` compare progress-bar values
+  numerically, so `100` and `100.0` both complete (REVIEW F4).
+- Gave the `:square` spinner style its own frames and built progress-bar fills
+  and the dim pulse through `limner.text`, so a bar keeps its width and a dim
+  pulse keeps its colour (REVIEW F4/B1).
 - Made `limner.render/buffer-stats` count a wide grapheme once rather than
   counting its continuation as a second non-empty cell.
 - Removed every JVM reflection warning from `src/` with explicit type hints

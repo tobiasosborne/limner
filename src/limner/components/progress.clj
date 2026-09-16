@@ -5,9 +5,15 @@
   Spinner styles are a closed vocabulary because an unknown style otherwise
   creates nil frames and fails later during animation. Unknown styles and
   missing, empty, or non-string custom frames therefore throw `ex-info` with
-  `:limner.components.progress/invalid-spinner-style` (ADR 0004)."
+  `:limner.components.progress/invalid-spinner-style` (ADR 0004).
+
+  Completion is numeric (`value` compares as a number, so 100 and 100.0 both
+  complete), and the animation frames of every style differ. Bar fills and the
+  pulsing dim effect compose through `limner.text` rather than concatenating a
+  reset, so a bar keeps its width and a dim pulse keeps its colour."
   (:require [clojure.string :as str]
-            [limner.core :as core]))
+            [limner.core :as core]
+            [limner.text :as text]))
 
 ;; ────────────────────── Spinner Styles ──────────────────────
 (def spinner-styles
@@ -20,7 +26,7 @@
    :box ["◰" "◳" "◲" "◱"]
    :bounce ["⠁" "⠂" "⠄" "⠂"]
    :circle ["◐" "◓" "◑" "◒"]
-   :square ["◰" "◳" "◲" "◱"]
+   :square ["▙" "▛" "▜" "▟"]
    :toggle ["⊶" "⊷"]})
 
 (defn- spinner-frames [style frames]
@@ -193,26 +199,26 @@
   "Render determinate progress bar"
   [{:keys [value width filled-char empty-char color show-percentage]}]
   (let [;; Calculate bar width accounting for brackets and optional percentage
-        bar-width (int (if show-percentage (- width 7) (- width 2)))
-        filled-width (int (* bar-width (/ value 100.0)))
-        empty-width (int (- bar-width filled-width))
+        bar-width (max 0 (int (if show-percentage (- width 7) (- width 2))))
+        filled-width (max 0 (int (* bar-width (/ (double value) 100.0))))
+        empty-width (max 0 (int (- bar-width filled-width)))
 
         ;; Build bar components
         filled (apply str (repeat filled-width filled-char))
         empty (apply str (repeat empty-width empty-char))
-        bar (str "[" (core/color color filled) empty "]")
 
         ;; Add percentage if requested
         percentage-str (when show-percentage
-                        (format " %3d%%" (int value)))]
-    (str bar percentage-str)))
+                         (str " " (text/to-ansi (text/pad-left (str (int value)) 3)) "%"))]
+    (text/to-ansi
+     (text/concat "[" (core/color color filled) empty "]" (or percentage-str "")))))
 
 (defn- render-progress-bar-indeterminate
   "Render indeterminate progress bar with moving segment"
   [{:keys [width empty-char animation-frame color]}]
-  (let [bar-width (int (- width 2))
+  (let [bar-width (max 0 (- width 2))
         segment-width 5
-        position (int (mod animation-frame bar-width))
+        position (if (pos? bar-width) (int (mod animation-frame bar-width)) 0)
 
         ;; Create bar with moving segment
         bar-chars (for [i (range bar-width)]
@@ -220,7 +226,7 @@
                            (< i (+ position segment-width)))
                      (core/color color "█")
                      empty-char))]
-    (str "[" (apply str bar-chars) "]")))
+    (text/to-ansi (text/concat "[" (apply text/concat bar-chars) "]"))))
 
 (defn- render-progress-bar
   "Render progress bar to string"
@@ -264,8 +270,8 @@
 
     (if use-bright?
       (core/color color text)
-      ;; Use dimmer version (could be enhanced with more ANSI codes)
-      (str "\u001B[2m" (core/color color text) "\u001B[22m"))))
+      ;; Use a dim span so the colour is preserved without a bare reset
+      (text/to-ansi (text/style {:dim true} (core/color color text))))))
 
 (defn render
   "Render any progress component to string"
@@ -279,10 +285,13 @@
 
 ;; ────────────────────── Helper Functions ──────────────────────
 (defn complete?
-  "Check if progress indicator shows completion"
+  "Check if progress indicator shows completion.
+
+  Progress-bar values compare numerically, so `100` and `100.0` both complete
+  (REVIEW F4)."
   [component]
   (case (:type component)
-    :progress-bar (= 100 (:value component))
+    :progress-bar (>= (double (:value component)) 100.0)
     :step-indicator (= (:current component) (:total component))
     false))
 

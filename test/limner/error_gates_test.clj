@@ -126,7 +126,8 @@
     "src/limner/layout.clj"
     "src/limner/table.clj"
     "src/limner/components/list.clj"
-    "src/limner/components/input.clj"})
+    "src/limner/components/input.clj"
+    "src/limner/components/progress.clj"})
 
 (def ^:private banned-text-symbols
   "Symbols whose UTF-16 semantics must not appear in a component namespace."
@@ -167,7 +168,13 @@
    "Input counts grapheme units and history entries; boundaries come from limner.text."
 
    ["src/limner/components/input.clj" 'nth]
-   "Input indexes its own grapheme-unit vector; text is sliced by limner.text."})
+   "Input indexes its own grapheme-unit vector; text is sliced by limner.text."
+
+   ["src/limner/components/progress.clj" 'count]
+   "Progress counts frames and labels; rendered text is built by limner.text."
+
+   ["src/limner/components/progress.clj" 'nth]
+   "Progress indexes its own frame and label vectors, never text columns."})
 
 (defn- banned-use [form]
   (cond

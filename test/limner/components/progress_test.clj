@@ -1,7 +1,12 @@
 (ns limner.components.progress-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
+            [limner.component-support :as component]
             [limner.components.progress :as progress]
-            [clojure.string :as str]))
+            [limner.text :as text]))
 
 ;; ────────────────────── Spinner Tests ──────────────────────
 (deftest test-spinner-creation
@@ -268,6 +273,59 @@
           spinner (progress/spinner :style :custom :frames custom-frames)
           rendered (progress/render spinner)]
       (is (some #(str/includes? rendered %) custom-frames)))))
+
+;; ────────────────────── Numeric completion and frame rules ──────────────────────
+(deftest complete?-is-numeric
+  (testing "Integer and floating completion agree"
+    (is (progress/complete? (progress/progress-bar :value 100.0)))
+    (is (progress/complete? (progress/set-value (progress/progress-bar) 100.0)))
+    (is (progress/complete? (progress/set-value (progress/progress-bar) 100)))
+    (is (not (progress/complete? (progress/set-value (progress/progress-bar) 99.99))))))
+
+(deftest spinner-style-frames-are-distinct
+  (testing "Every named spinner style has its own frames"
+    (is (not= (get progress/spinner-styles :box)
+              (get progress/spinner-styles :square)))
+    (is (= (count (distinct (vals progress/spinner-styles)))
+           (count progress/spinner-styles))))
+  (testing "An unknown style throws before it can be ticked"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Spinner"
+                          (progress/spinner :style :nope)))))
+
+(deftest progress-goldens
+  (testing "A determinate bar keeps its colour span and exact width"
+    (component/assert-lines
+     ["[\u001B[32m██\u001B[39m░░░]  40%"]
+     [(progress/render (progress/progress-bar :value 40 :width 12 :color :green))]))
+  (testing "A spinner renders its coloured frame"
+    (component/assert-lines
+     ["\u001B[36m-\u001B[0m"]
+     [(progress/render (progress/spinner :style :line :color :cyan))]))
+  (testing "A dim pulse keeps its colour without a bare reset"
+    (component/assert-lines
+     ["\u001B[2;36mx\u001B[0m"]
+     [(progress/render (progress/pulse :text "x" :color :cyan))])))
+
+(deftest progress-bar-width-property
+  (testing "Every determinate bar is exactly its requested width"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [value (gen/choose 0 100)
+                                 width (gen/choose 7 40)
+                                 show? gen/boolean]
+                    (let [bar (progress/progress-bar :value value :width width
+                                                     :show-percentage show?)]
+                      (= width (text/width (progress/render bar))))))]
+      (is (:pass? result) (pr-str result))))
+  (testing "Every indeterminate bar is exactly its requested width"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [width (gen/choose 2 40)
+                                 frame (gen/choose 0 30)]
+                    (let [bar (-> (progress/progress-bar :type :indeterminate :width width)
+                                  (assoc :animation-frame frame))]
+                      (= width (text/width (progress/render bar))))))]
+      (is (:pass? result) (pr-str result)))))
 
 ;; Run all tests
 (defn run-tests []
