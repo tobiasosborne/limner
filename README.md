@@ -16,13 +16,15 @@ conformance work. [`limner.text`](docs/api/text.md) provides styled spans,
 portable grapheme segmentation, exact terminal width, safe slicing, padding,
 truncation, and wrapping. [`limner.ansi`](docs/api/ansi.md) is the shared,
 lossless ECMA-48 tokenizer beneath it.
-Components have not moved to the text layer yet, so keep these limitations in
-mind:
+Most components have not moved to the text layer yet, so keep this limitation
+in mind:
 
 - Components can misalign or clip text containing CJK characters, emoji, or
   existing ANSI colours.
-- The render buffer still stores UTF-16 code units rather than grapheme cells,
-  although terminal controls are now tokenized centrally and have zero width.
+
+The experimental render buffer now stores grapheme clusters and style values,
+including continuation cells for wide clusters. Its render loop remains
+experimental and performs terminal effects directly.
 
 The core surface is the colour, border, layout, terminal, panel, list, input,
 progress, and status-bar namespaces. These namespaces are experimental while
@@ -33,9 +35,9 @@ require the focused namespaces instead.
 
 ## Installation
 
-Once published, the `v0.1.0` tag will mark the legacy baseline at this
-revision. Until then, this coordinate pins that commit by its full SHA; replace
-the SHA when you want a different revision.
+The `v0.1.0` tag marks the legacy baseline at this revision. The coordinate
+below pins that commit by its full SHA; replace the SHA when you want a
+different revision.
 
 For a Clojure project, add the dependency to `deps.edn`:
 

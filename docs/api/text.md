@@ -43,6 +43,10 @@ measuring operations supports `{:ambiguous-width 1}` (the default) or
 `{:ambiguous-width 2}`.
 
 - `(width value)` and `(width value options)` return terminal columns.
+- `(clusters value)` and `(clusters value options)` return one
+  `{:cluster :style :width :raw}` map per grapheme unit. This is the low-level
+  seam used by column-aware display buffers; opaque controls remain in `:raw`
+  and do not contribute width.
 - `(slice-columns value start end)` uses half-open bounds and never splits a
   grapheme. Covering one column of a two-column cluster returns one space with
   that cluster's style.
