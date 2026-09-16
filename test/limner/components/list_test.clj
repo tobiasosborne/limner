@@ -1,7 +1,13 @@
 (ns limner.components.list-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
+            [limner.component-support :as component]
             [limner.components.list :as list]
-            [clojure.string :as str]))
+            [limner.core :as core]
+            [limner.text :as text]))
 
 ;; ────────────────────── List Creation Tests ──────────────────────
 (deftest test-list-creation
@@ -425,6 +431,79 @@
             (let [cleared (list/clear-filter filtered3)]
               (is (= 5 (list/item-count cleared)))
               (is (= 0 (:selected cleared))))))))))
+
+;; ────────────────────── Column-correct goldens ──────────────────────
+(deftest list-cjk-styled-emoji-golden
+  (testing "Wide, styled, and emoji items each occupy their display columns"
+    (component/assert-lines
+     [" > \u001B[36m日本    \u001B[39m "
+      "   \u001B[31mR\u001B[39m        "
+      "   👩‍🔬       "]
+     (list/render (list/list-component
+                   :items ["日本" (core/color :red "R") "👩‍🔬"]
+                   :width 12 :height 3 :border false)))))
+
+(deftest list-width-is-total-width
+  (testing "A bordered list occupies exactly the configured width"
+    (let [rendered (list/render (list/list-component
+                                 :items ["A" "B" "C"]
+                                 :width 20 :height 3))]
+      (is (every? #(= 20 (text/width %)) rendered))
+      (is (= "┌──────────────────┐" (first rendered)))
+      (is (= "└──────────────────┘" (last rendered))))))
+
+(deftest list-narrow-width-throws
+  (testing "A width too small for the item prefix throws a list error"
+    (is (= :limner.components.list/invalid-width
+           (:limner/error (try (list/render (list/list-component :items ["x"] :width 4))
+                               nil
+                               (catch clojure.lang.ExceptionInfo e (ex-data e))))))
+    (is (= :limner.components.list/invalid-width
+           (:limner/error (try (list/render (list/list-component
+                                             :items ["x"] :width 10
+                                             :show-filter true :border false))
+                               nil
+                               (catch clojure.lang.ExceptionInfo e (ex-data e))))))))
+
+(deftest selection-keeps-visible
+  (testing "Moving down scrolls the selection into view"
+    (let [down (list/select-next
+                (list/list-component :items (vec (range 20)) :height 3
+                                     :width 20 :border false)
+                5)]
+      (is (= 5 (:selected down)))
+      (is (= 3 (:scroll-offset down)))))
+  (testing "Moving up scrolls the selection back into view"
+    (let [up (list/select-prev
+              (list/list-component :items (vec (range 20)) :height 3
+                                   :width 20 :border false
+                                   :selected 5 :scroll-offset 3)
+              4)]
+      (is (= 1 (:selected up)))
+      (is (= 1 (:scroll-offset up))))))
+
+(deftest set-filter-resets-scroll
+  (testing "Filtering resets selection and scroll even when nothing matches"
+    (let [base (list/list-component :items ["Apple" "Banana"]
+                                    :selected 1 :scroll-offset 1)
+          filtered (list/set-filter base "zzz")]
+      (is (= 0 (:selected filtered)))
+      (is (= 0 (:scroll-offset filtered)))
+      (is (= [] (list/filtered-items filtered))))))
+
+(deftest every-list-line-has-requested-width
+  (testing "Generated lists keep one exact width per rendered line"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [items (gen/vector component/line-gen 1 5)
+                                 width (gen/choose 9 30)
+                                 height (gen/choose 1 5)]
+                    (let [rendered (list/render
+                                    (list/list-component
+                                     :items items :width width :height height))]
+                      (and (seq rendered)
+                           (every? #(= width (text/width %)) rendered)))))]
+      (is (:pass? result) (pr-str result)))))
 
 ;; Run all tests
 (defn run-tests []

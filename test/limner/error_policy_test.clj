@@ -5,6 +5,7 @@
             [limner.ansi :as ansi]
             [limner.ansi.sgr :as sgr]
             [limner.borders :as borders]
+            [limner.components.list :as list]
             [limner.core :as core]
             [limner.events :as events]
             [limner.layout :as layout]
@@ -225,6 +226,14 @@
   (is (= :limner.table/invalid-alignment
          (thrown-class #(table/table [["a" "b"]] :align [:left]))))
   (is (= :limner.table/invalid-padding (thrown-class #(table/table [["a"]] :padding -1)))))
+
+(deftest list-rejects-unusable-widths
+  (is (= :limner.components.list/invalid-width
+         (thrown-class #(list/render (list/list-component :items ["x"] :width 4)))))
+  (is (= :limner.components.list/invalid-width
+         (thrown-class #(list/render (list/list-component
+                                      :items ["x"] :width 10
+                                      :border false :show-filter true))))))
 
 ;; ────────────────────── no printing ──────────────────────
 

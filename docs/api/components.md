@@ -80,8 +80,16 @@ Creates a list component.
 - `:items`: Vector of strings or maps `{:label "..." :value ...}`.
 - `:selected`: Index of selected item.
 - `:height`: Visible height (default 10).
+- `:width`: Total rendered width including the border (default 40).
 - `:multi-select`: Enable multiple selection.
 - `:filter-text`: Filter string.
+- `:show-indices`: Prefix each row with its index.
+- `:show-filter`: Draw the filter prompt as the first row.
+
+Rendering measures, truncates, and pads every label in terminal display
+columns through `limner.text`, so CJK and emoji items fit and a label that
+already carries ANSI keeps its style. A `:width` too small for the item prefix
+or filter prompt throws `:limner.components.list/invalid-width`.
 
 ### Operations
 - `(select-next state n)`
@@ -89,8 +97,10 @@ Creates a list component.
 - `(set-filter state text)`
 - `(toggle-selection state)`
 
-Selection movement does not automatically update `:scroll-offset`; call
-`adjust-scroll` when the selected item must remain visible.
+Selecting the next or previous item adjusts `:scroll-offset` so the selection
+stays inside the viewport. Changing the filter text resets both the selection
+and the scroll offset, even when no item matches. `adjust-scroll` remains
+available for callers that change `:selected` directly.
 
 ---
 

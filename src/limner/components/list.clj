@@ -1,9 +1,20 @@
 (ns limner.components.list
-  "List component - scrollable, selectable item lists"
+  "Scrollable, selectable item lists.
+
+  Rendering measures, truncates, and pads every item through `limner.text`, so
+  CJK and emoji items occupy their true display columns and an item that
+  already carries ANSI keeps its style. `:width` is the total rendered width
+  including the border; a width too small for the item prefix throws
+  `:limner.components.list/invalid-width` instead of failing inside a
+  substring operation (REVIEW F2/B3).
+
+  Selection, filtering, and scrolling are pure state transitions. Selecting an
+  item adjusts the scroll offset so the selection stays visible, and changing
+  the filter text resets both the selection and the scroll offset."
   (:refer-clojure :exclude [list? empty?])
   (:require [clojure.string :as str]
             [limner.borders :as borders]
-            [limner.core :as core]))
+            [limner.text :as text]))
 
 ;; ────────────────────── List State ──────────────────────
 (defn list-component
@@ -113,12 +124,13 @@
           items))))
 
 (defn set-filter
-  "Set filter text and reset selection"
+  "Set filter text and reset selection and scroll to the top.
+
+  Resetting the scroll in every branch matters: a filter that matches nothing
+  still moves the viewport back to the first row, so it cannot stay scrolled
+  to an item that is no longer visible."
   [list-state filter-text]
-  (let [new-state (assoc list-state :filter-text filter-text)]
-    (if (clojure.core/empty? (filtered-items new-state))
-      (assoc new-state :selected 0)
-      (assoc new-state :selected 0 :scroll-offset 0))))
+  (assoc list-state :filter-text filter-text :selected 0 :scroll-offset 0))
 
 (defn clear-filter
   "Clear filter text"
@@ -144,43 +156,47 @@
       (assoc list-state :selected index)
       list-state)))
 
+(declare adjust-scroll)
+
 (defn select-next
-  "Move selection down by n items"
+  "Move selection down by n items, keeping it inside the viewport."
   [list-state n]
   (let [items (filtered-items list-state)
         item-count (count items)
         {:keys [selected wrap]} list-state]
     (if (zero? item-count)
       list-state
-      (let [new-selected (+ selected n)]
-        (cond
-          (< new-selected item-count)
-          (assoc list-state :selected new-selected)
+      (let [new-selected (+ selected n)
+            moved (cond
+                    (< new-selected item-count)
+                    (assoc list-state :selected new-selected)
 
-          wrap
-          (assoc list-state :selected (mod new-selected item-count))
+                    wrap
+                    (assoc list-state :selected (mod new-selected item-count))
 
-          :else
-          (assoc list-state :selected (dec item-count)))))))
+                    :else
+                    (assoc list-state :selected (dec item-count)))]
+        (adjust-scroll moved)))))
 
 (defn select-prev
-  "Move selection up by n items"
+  "Move selection up by n items, keeping it inside the viewport."
   [list-state n]
   (let [items (filtered-items list-state)
         item-count (count items)
         {:keys [selected wrap]} list-state]
     (if (zero? item-count)
       list-state
-      (let [new-selected (- selected n)]
-        (cond
-          (>= new-selected 0)
-          (assoc list-state :selected new-selected)
+      (let [new-selected (- selected n)
+            moved (cond
+                    (>= new-selected 0)
+                    (assoc list-state :selected new-selected)
 
-          wrap
-          (assoc list-state :selected (mod new-selected item-count))
+                    wrap
+                    (assoc list-state :selected (mod new-selected item-count))
 
-          :else
-          (assoc list-state :selected 0))))))
+                    :else
+                    (assoc list-state :selected 0))]
+        (adjust-scroll moved)))))
 
 (defn select-first
   "Select first item"
@@ -238,21 +254,23 @@
 
 ;; ────────────────────── Scrolling ──────────────────────
 (defn adjust-scroll
-  "Adjust scroll offset to keep selection visible"
+  "Adjust scroll offset so the selection stays visible and in range."
   [{:keys [selected scroll-offset height] :as list-state}]
-  (let [new-offset (cond
-                    ;; Selection above viewport
-                    (< selected scroll-offset)
-                    selected
+  (let [item-count (count (filtered-items list-state))
+        max-offset (max 0 (- item-count height))
+        new-offset (cond
+                     ;; Selection above viewport
+                     (< selected scroll-offset)
+                     selected
 
-                    ;; Selection below viewport
-                    (>= selected (+ scroll-offset height))
-                    (- selected height -1)
+                     ;; Selection below viewport
+                     (>= selected (+ scroll-offset height))
+                     (- selected height -1)
 
-                    ;; Selection in viewport
-                    :else
-                    scroll-offset)]
-    (assoc list-state :scroll-offset new-offset)))
+                     ;; Selection in viewport
+                     :else
+                     scroll-offset)]
+    (assoc list-state :scroll-offset (max 0 (min new-offset max-offset)))))
 
 (defn visible-items
   "Get items visible in current viewport"
@@ -261,73 +279,83 @@
     (vec (take height (drop scroll-offset items)))))
 
 ;; ────────────────────── Rendering ──────────────────────
-(defn render-item
-  "Render a single item with selection indicator"
+
+(defn- content-columns
+  "Display columns available to item rows for this list's border setting."
+  [{:keys [width border]}]
+  (- width (if border 4 0)))
+
+(defn- prefix-columns
+  "Display width of the per-row prefix (cursor, checkbox, index)."
+  [{:keys [cursor-char multi-select show-indices]}]
+  (+ (text/width (str cursor-char " "))
+     (if multi-select 2 0)
+     (if show-indices 5 0)))
+
+(defn- validate-render-width
+  "Return the content columns, throwing when the prefix cannot fit."
+  [list-state]
+  (let [columns (content-columns list-state)
+        prefix (prefix-columns list-state)
+        filter-minimum (if (:show-filter list-state)
+                         (+ (text/width "Filter: ") 3)
+                         0)
+        minimum (max (+ prefix 3) filter-minimum)]
+    (when (< columns minimum)
+      (throw (ex-info "List width is too small for its item prefix"
+                      {:limner/error :limner.components.list/invalid-width
+                       :width (:width list-state)
+                       :border (:border list-state)
+                       :content-columns columns
+                       :minimum-content-columns minimum
+                       :limner/hint "Increase :width, or disable :show-indices, :multi-select, or :show-filter"})))
+    columns))
+
+(defn- item-prefix
+  "Styled cursor, checkbox, and index prefix for one row."
   [{:keys [cursor-char checkbox-checked checkbox-unchecked show-indices
-           item-renderer multi-select selected-items width filter-text]
-    :as list-state}
-   item original-idx display-idx is-selected?]
-  (let [;; Get item label
-        label (if item-renderer
-               (item-renderer item is-selected?)
-               (item-label item))
+           multi-select selected-items]}
+   original-idx display-idx is-selected?]
+  (text/concat (if is-selected? (str cursor-char " ") "  ")
+               (if multi-select
+                 (str (if (contains? selected-items original-idx)
+                        checkbox-checked checkbox-unchecked) " ")
+                 "")
+               (if show-indices
+                 (text/concat (text/pad-left (str display-idx) 3) ". ")
+                 "")))
 
-        ;; Multi-select checkbox
-        checkbox (when multi-select
-                  (if (contains? selected-items original-idx)
-                    (str checkbox-checked " ")
-                    (str checkbox-unchecked " ")))
+(defn render-item
+  "Render one item row at exactly the list's content width.
 
-        ;; Selection cursor
-        cursor (if is-selected?
-                (str cursor-char " ")
-                "  ")
-
-        ;; Index prefix
-        index-str (when show-indices
-                   (format "%3d. " display-idx))
-
-        ;; Combine parts
-        prefix (str cursor checkbox index-str)
-        max-label-width (- width (core/visible-length prefix) 2)
-
-        ;; Truncate or pad label
-        truncated-label (if (> (core/visible-length label) max-label-width)
-                         (str (subs label 0 (- max-label-width 3)) "...")
-                         label)
-
-        padded-label (if (< (core/visible-length truncated-label) max-label-width)
-                      (str truncated-label
-                           (apply str (repeat (- max-label-width (core/visible-length truncated-label)) " ")))
-                      truncated-label)
-
-        ;; Highlight if selected
-        final-label (if is-selected?
-                     (core/color :cyan padded-label)
-                     padded-label)]
-
-    (str " " prefix final-label " ")))
+  `label` is measured and cut through `limner.text`; a selected row is tinted
+  cyan without clearing a style the label already carries."
+  [list-state item original-idx display-idx is-selected?]
+  (let [columns (content-columns list-state)
+        label (if-let [renderer (:item-renderer list-state)]
+                (renderer item is-selected?)
+                (item-label item))
+        prefix (item-prefix list-state original-idx display-idx is-selected?)
+        label-columns (max 0 (- columns (text/width prefix) 2))
+        padded (text/pad-right (text/truncate label label-columns) label-columns)
+        final (if is-selected? (text/style {:fg :cyan} padded) padded)]
+    (text/to-ansi (text/concat " " prefix final " "))))
 
 (defn render-filter-line
-  "Render filter input line"
-  [{:keys [filter-text width]}]
-  (let [prefix "Filter: "
-        max-width (- width 4)
-        available (- max-width (count prefix))
-        display-text (if (> (count filter-text) available)
-                      (str "..." (subs filter-text (- (count filter-text) (- available 3))))
-                      filter-text)
-        padding (apply str (repeat (- available (count display-text)) " "))]
-    (str " " prefix display-text padding " ")))
+  "Render the filter prompt as one row of the list's content width."
+  [{:keys [filter-text] :as list-state}]
+  (let [columns (content-columns list-state)
+        prefix "Filter: "
+        available (max 0 (- columns 2 (text/width prefix)))
+        display (text/truncate filter-text available)]
+    (text/to-ansi (text/concat " " prefix (text/pad-right display available) " "))))
 
 (defn render-list
-  "Render list content (without border)"
+  "Render list content (without border), one exact content width per row."
   [{:keys [selected scroll-offset show-filter height] :as list-state}]
-  (let [items (filtered-items list-state)
+  (let [columns (validate-render-width list-state)
         indices (filtered-item-indices list-state)
         visible (visible-items list-state)
-
-        ;; Render items
         item-lines (map-indexed
                     (fn [idx item]
                       (let [display-idx (+ scroll-offset idx)
@@ -335,29 +363,28 @@
                             is-selected? (= display-idx selected)]
                         (render-item list-state item original-idx display-idx is-selected?)))
                     visible)
-
-        ;; Add empty lines if needed
-        empty-lines (repeat (- height (count item-lines)) (str " " (apply str (repeat (- (:width list-state) 2) " ")) " "))
+        empty-line (apply str (repeat columns " "))
+        empty-lines (repeat (max 0 (- height (count item-lines))) empty-line)
         all-lines (concat item-lines empty-lines)
-
-        ;; Add filter line if enabled
         final-lines (if show-filter
-                     (cons (render-filter-line list-state) all-lines)
-                     all-lines)]
-
+                      (cons (render-filter-line list-state) all-lines)
+                      all-lines)]
     (vec final-lines)))
 
 (defn render
-  "Render list component to vector of strings"
+  "Render list component to vector of strings.
+
+  `:width` is the total width including the border, so every returned line is
+  exactly `:width` display columns wide."
   [{:keys [border border-style label] :as list-state}]
   (let [content-lines (render-list list-state)
         final-lines (if border
-                     (if label
-                       (borders/draw-titled-box label content-lines
-                                               :border-style border-style
-                                               :title-pos :left)
-                       (borders/draw-box content-lines :border-style border-style))
-                     content-lines)]
+                      (if label
+                        (borders/draw-titled-box label content-lines
+                                                :border-style border-style
+                                                :title-pos :left)
+                        (borders/draw-box content-lines :border-style border-style))
+                      content-lines)]
     (vec final-lines)))
 
 (defn render-to-string

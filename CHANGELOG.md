@@ -133,6 +133,14 @@ The following functions changed their error behaviour:
 - Made `limner.layout` throw `:limner.layout/invalid-dimension` with an
   actionable message when spacing and padding exceed the available space,
   instead of passing a negative space to constraint resolution (REVIEW D2).
+- Made `limner.components.list` render every row at the configured width and
+  measure, truncate, and pad items through `limner.text`, so CJK and emoji
+  items fit and styled labels keep their spans. A width too small for the item
+  prefix throws `:limner.components.list/invalid-width` instead of a substring
+  error (REVIEW F2/B3).
+- Made `select-next` and `select-prev` adjust the scroll offset to keep the
+  selection visible, and made `set-filter` reset both selection and scroll in
+  every branch (REVIEW F2).
 - Made `limner.render/buffer-stats` count a wide grapheme once rather than
   counting its continuation as a second non-empty cell.
 - Removed every JVM reflection warning from `src/` with explicit type hints
