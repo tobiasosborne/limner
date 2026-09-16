@@ -33,7 +33,8 @@ run.
   which the pre-commit hook exports). Use an imperative subject line, a body
   that says what changed and why and cites the reference or ADR used, and
   these trailers:
-  `Bead: <id>` and `Implemented-by: Codex gpt-5.6-sol (xhigh), run <run-id>`.
+  `Bead: <id>` and `Implemented-by: <identity>` where `<identity>` is the exact
+  string given under "Your identity" at the end of this brief.
   Write the commit message to a temporary file and use `git commit -F <file>`
   so newlines and trailers are real (run R3 embedded literal `\n`).
   Never push, never tag, never amend or rebase earlier commits. If a bead
