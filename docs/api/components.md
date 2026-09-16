@@ -170,6 +170,14 @@ Creates a progress bar.
 - `:width`: Total rendered width in character columns.
 - `:type`: `:determinate` or `:indeterminate`.
 - `:show-percentage`: Show the right-aligned percentage label (default true).
+- `:filled-char`, `:empty-char`: Positive-width string patterns used for the
+  filled and empty regions. Patterns are repeated and sliced through
+  `limner.text`, so CJK, emoji ZWJ, ANSI styles, and OSC 8 links cannot change
+  the requested width.
+
+Widths must be non-negative integers and fill patterns must contain visible
+text; invalid values throw `:limner.components.progress/invalid-width` or
+`:limner.components.progress/invalid-fill`.
 
 ### `spinner`
 `(spinner & options)`

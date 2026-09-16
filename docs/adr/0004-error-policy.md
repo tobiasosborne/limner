@@ -110,6 +110,8 @@ caller believes an option is in effect that is not, so those throw.
 | `:limner.core/invalid-color` | `limner.core/color` | spec is not a known colour |
 | `:limner.core/invalid-string` | `limner.core/color` | text is not a string |
 | `:limner.components.progress/invalid-spinner-style` | `limner.components.progress/spinner` | style is unknown, or `:custom` frames are missing, empty, or not strings |
+| `:limner.components.progress/invalid-width` | `limner.components.progress/progress-bar` | width is not a non-negative integer |
+| `:limner.components.progress/invalid-fill` | `limner.components.progress/progress-bar` | a fill pattern is not a positive-width string |
 | `:limner.text/invalid-input` | `limner.text` column operations | input is not a string or styled-text vector |
 | `:limner.text/invalid-options` | `limner.text` width operations | options are not a map, contain an unsupported key, or set `:ambiguous-width` to something other than 1 or 2 |
 | `:limner.text/invalid-bounds` | `limner.text/slice-columns` | bounds are not ordered non-negative integers |

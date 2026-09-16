@@ -306,6 +306,46 @@
      ["\u001B[2;36mx\u001B[0m"]
      [(progress/render (progress/pulse :text "x" :color :cyan))])))
 
+(deftest progress-fill-pattern-goldens
+  (testing "CJK, emoji ZWJ, styled, and OSC 8 patterns fill terminal columns"
+    (let [link "\u001B]8;;https://x\u001B\\link\u001B]8;;\u001B\\"
+          render-fill #(progress/render
+                        (progress/progress-bar :value 50 :width 12
+                                               :show-percentage false
+                                               :filled-char %))]
+      (component/assert-lines
+       ["[\u001B[32m日本 \u001B[39m░░░░░]"]
+       [(render-fill "日本語")])
+      (component/assert-lines
+       ["[\u001B[32m👩‍🔬👩‍🔬 \u001B[39m░░░░░]"]
+       [(render-fill "👩‍🔬")])
+      (component/assert-lines
+       ["[\u001B[31mRRRRR\u001B[39m░░░░░]"]
+       [(render-fill "\u001B[31mR\u001B[0m")])
+      (component/assert-lines
+       ["[\u001B]8;;https://x\u001B\\\u001B[32mlinkl\u001B]8;;\u001B\\\u001B[39m░░░░░]"]
+       [(render-fill link)])))
+  (testing "A wide indeterminate empty pattern still fits exactly"
+    (component/assert-lines
+     ["[界\u001B[32m████\u001B[39m]"]
+     [(progress/render (assoc (progress/progress-bar
+                               :type :indeterminate :width 8 :empty-char "界")
+                              :animation-frame 2))])))
+
+(deftest invalid-progress-width-and-fill-throw-component-errors
+  (doseq [width [-1 1.5 "12"]]
+    (is (= :limner.components.progress/invalid-width
+           (:limner/error
+            (try (progress/progress-bar :width width)
+                 nil
+                 (catch clojure.lang.ExceptionInfo e (ex-data e)))))))
+  (doseq [fill ["" "\u2060" nil]]
+    (is (= :limner.components.progress/invalid-fill
+           (:limner/error
+            (try (progress/progress-bar :filled-char fill)
+                 nil
+                 (catch clojure.lang.ExceptionInfo e (ex-data e))))))))
+
 (deftest progress-bar-width-property
   (testing "Every determinate bar is exactly its requested width"
     (let [result (tc/quick-check

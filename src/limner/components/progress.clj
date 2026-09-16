@@ -1,5 +1,5 @@
 (ns limner.components.progress
-  "Experimental progress indicators: spinners, bars, steps, and pulse effects.
+  "Progress indicators: spinners, bars, steps, and pulse effects.
 
   Constructors return plain immutable maps and rendering returns strings.
   Spinner styles are a closed vocabulary because an unknown style otherwise
@@ -10,7 +10,9 @@
   Completion is numeric (`value` compares as a number, so 100 and 100.0 both
   complete), and the animation frames of every style differ. Bar fills and the
   pulsing dim effect compose through `limner.text` rather than concatenating a
-  reset, so a bar keeps its width and a dim pulse keeps its colour."
+  reset, so a bar keeps its width and a dim pulse keeps its colour. Progress
+  fill patterns are repeated and sliced by display columns; invalid widths or
+  zero-width fills throw the ADR 0004 component error classes."
   (:require [clojure.string :as str]
             [limner.core :as core]
             [limner.text :as text]))
@@ -95,8 +97,8 @@
    - :value - current value 0-100 (for determinate bars)
    - :width - bar width in characters (default 30)
    - :show-percentage - show percentage label (default true)
-   - :filled-char - character for filled portion (default \"█\")
-   - :empty-char - character for empty portion (default \"░\")
+   - :filled-char - positive-width fill pattern (default \"█\")
+   - :empty-char - positive-width fill pattern (default \"░\")
    - :color - color for filled portion (default :green)"
   [& {:keys [type value width show-percentage filled-char empty-char color]
       :or {type :determinate
@@ -106,6 +108,16 @@
            filled-char "█"
            empty-char "░"
            color :green}}]
+  (when-not (and (integer? width) (<= 0 width))
+    (throw (ex-info "Progress width must be a non-negative integer"
+                    {:limner/error :limner.components.progress/invalid-width
+                     :width width :type (type width)})))
+  (doseq [[option fill] [[:filled-char filled-char] [:empty-char empty-char]]]
+    (when-not (and (string? fill) (pos? (text/width fill)))
+      (throw (ex-info "Progress fill patterns must be positive-width strings"
+                      {:limner/error :limner.components.progress/invalid-fill
+                       :option option :fill fill :type (type fill)
+                       :limner/hint "Use a string containing at least one visible grapheme"}))))
   (let [clamped-value (max 0 (min 100 value))]
     {:type :progress-bar
      :bar-type type
@@ -189,6 +201,20 @@
     :slow 16))
 
 ;; ────────────────────── Rendering ──────────────────────
+(defn- fill-columns
+  "Repeat `pattern` and safely slice it to exactly `columns` display columns."
+  [pattern columns]
+  (let [pattern (text/from-ansi pattern)
+        pattern-width (text/width pattern)
+        repetitions (if (zero? columns)
+                      0
+                      (quot (+ columns pattern-width -1) pattern-width))]
+    (text/slice-columns (apply text/concat (repeat repetitions pattern))
+                        0 columns)))
+
+(defn- fit-width [value width]
+  (text/pad-right (text/slice-columns value 0 width) width))
+
 (defn- render-spinner
   "Render spinner to string"
   [{:keys [frames frame color]}]
@@ -203,15 +229,16 @@
         filled-width (max 0 (int (* bar-width (/ (double value) 100.0))))
         empty-width (max 0 (int (- bar-width filled-width)))
 
-        ;; Build bar components
-        filled (apply str (repeat filled-width filled-char))
-        empty (apply str (repeat empty-width empty-char))
+        ;; Build bar components in columns, not occurrences of a string.
+        filled (fill-columns filled-char filled-width)
+        filled (text/from-ansi (core/color color (text/to-ansi filled)))
+        empty (fill-columns empty-char empty-width)
 
         ;; Add percentage if requested
         percentage-str (when show-percentage
                          (str " " (text/to-ansi (text/pad-left (str (int value)) 3)) "%"))]
     (text/to-ansi
-     (text/concat "[" (core/color color filled) empty "]" (or percentage-str "")))))
+     (fit-width (text/concat "[" filled empty "]" (or percentage-str "")) width))))
 
 (defn- render-progress-bar-indeterminate
   "Render indeterminate progress bar with moving segment"
@@ -219,14 +246,11 @@
   (let [bar-width (max 0 (- width 2))
         segment-width 5
         position (if (pos? bar-width) (int (mod animation-frame bar-width)) 0)
-
-        ;; Create bar with moving segment
-        bar-chars (for [i (range bar-width)]
-                   (if (and (>= i position)
-                           (< i (+ position segment-width)))
-                     (core/color color "█")
-                     empty-char))]
-    (text/to-ansi (text/concat "[" (apply text/concat bar-chars) "]"))))
+        visible-segment (min segment-width (- bar-width position))
+        before (fill-columns empty-char position)
+        segment (fill-columns (core/color color "█") visible-segment)
+        after (fill-columns empty-char (- bar-width position visible-segment))]
+    (text/to-ansi (fit-width (text/concat "[" before segment after "]") width))))
 
 (defn- render-progress-bar
   "Render progress bar to string"

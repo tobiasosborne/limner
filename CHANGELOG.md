@@ -85,6 +85,9 @@ The following functions changed their error behaviour:
 - `limner.components.progress` `:square` spinner frames changed from the
   `:box` glyphs to distinct quadrant blocks, so every named style animates
   differently (REVIEW F4).
+- `limner.components.progress/progress-bar` rejects non-integer or negative
+  widths and zero-width fill patterns with namespaced `ex-info` instead of
+  rendering the wrong geometry or failing in arithmetic.
 
 ### Added
 
@@ -177,6 +180,8 @@ The following functions changed their error behaviour:
 - Gave the `:square` spinner style its own frames and built progress-bar fills
   and the dim pulse through `limner.text`, so a bar keeps its width and a dim
   pulse keeps its colour (REVIEW F4/B1).
+- Repeated and sliced progress fill patterns by display columns, so CJK, emoji
+  ZWJ, pre-coloured, and OSC 8 patterns render at exactly the requested width.
 - Made `limner.components.statusbar` render one exact-width line through
   `limner.text`, preserving each section's foreground and attributes while the
   base colours fill only absent keys. It removes the private background table
