@@ -403,6 +403,12 @@
       (is (= "aX👩‍🔬" (:value updated)))
       (is (= 2 (:cursor updated))))))
 
+(deftest max-length-applies-to-the-resulting-grapheme-count
+  (testing "a multi-grapheme insertion cannot cross the configured maximum"
+    (let [state (input/input :value "a" :cursor 1 :max-length 2)]
+      (is (= state (input/insert-char state "👩‍🔬b")))
+      (is (= "a👩‍🔬" (:value (input/insert-char state "👩‍🔬")))))))
+
 (deftest history-prev-is-total
   (testing "An empty history returns the input unchanged"
     (let [i (input/input :value "typed")]

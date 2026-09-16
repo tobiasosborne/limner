@@ -186,6 +186,8 @@ The following functions changed their error behaviour:
 - Kept long input labels and narrow status indicators inside `:width`; invalid
   widths now throw `:limner.components.input/invalid-width` before reaching a
   lower-level slice operation.
+- Enforced input `:max-length` against the resulting grapheme count, so an
+  atomic multi-grapheme insertion cannot cross the configured limit.
 - Made `limner.components.progress/complete?` compare progress-bar values
   numerically, so `100` and `100.0` both complete (REVIEW F4).
 - Gave the `:square` spinner style its own frames and built progress-bar fills

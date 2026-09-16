@@ -84,6 +84,9 @@ widening it.
 - `(validate state)`
 
 `history-prev` returns the input unchanged when the history is empty.
+`insert-char` treats its string as one atomic insertion: if its grapheme
+clusters would make the result exceed `:max-length`, it returns the state
+unchanged rather than crossing the limit or splitting the insertion.
 
 ---
 

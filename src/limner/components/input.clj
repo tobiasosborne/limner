@@ -85,16 +85,20 @@
 
 ;; ────────────────────── Text Manipulation ──────────────────────
 (defn insert-char
-  "Insert `ch` (one grapheme or more) at the cursor, bounded by `:max-length`."
+  "Insert `ch` (one grapheme or more) at the cursor, bounded by `:max-length`.
+
+  The insertion is atomic: when all of `ch` would make the resulting value
+  exceed the grapheme limit, the state is returned unchanged."
   [input-state ch]
   (let [{:keys [value cursor max-length]} input-state
         total (cluster-count value)
+        inserted (cluster-count ch)
         cursor (max 0 (min cursor total))]
-    (if (and max-length (>= total max-length))
+    (if (and max-length (> (+ total inserted) max-length))
       input-state
       (assoc input-state
              :value (str (grapheme-slice value 0 cursor) ch (grapheme-slice value cursor total))
-             :cursor (+ cursor (cluster-count ch))))))
+             :cursor (+ cursor inserted)))))
 
 (defn delete-char
   "Delete the grapheme cluster at the cursor (Delete key)."
