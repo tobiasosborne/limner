@@ -16,22 +16,29 @@ conformance work. [`limner.text`](docs/api/text.md) provides styled spans,
 portable grapheme segmentation, exact terminal width, safe slicing, padding,
 truncation, and wrapping. [`limner.ansi`](docs/api/ansi.md) is the shared,
 lossless ECMA-48 tokenizer beneath it.
-Most components have not moved to the text layer yet, so keep this limitation
-in mind:
 
-- Components can misalign or clip text containing CJK characters, emoji, or
-  existing ANSI colours.
+The core rendering surface routes all user-visible text through that layer:
+`limner.borders`, `limner.layout`, `limner.table`,
+`limner.components.panel`, `limner.components.list`,
+`limner.components.input`, `limner.components.progress`, and
+`limner.components.statusbar` measure, slice, pad, and wrap in display
+columns, compose styles as spans, and have exact goldens plus
+every-line-width properties for ASCII, CJK, emoji ZWJ, and pre-coloured text.
 
-The experimental render buffer now stores grapheme clusters and style values,
-including continuation cells for wide clusters. Its render loop remains
-experimental and performs terminal effects directly.
+What remains:
 
-The core surface is the colour, border, layout, terminal, panel, list, input,
-progress, and status-bar namespaces. These namespaces are experimental while
-their foundations are reworked: `limner.render`, `limner.events`,
-`limner.state`, `limner.streaming`, `limner.syntax`, and
-`limner.components.markdown`. The top-level `limner` namespace is deprecated;
-require the focused namespaces instead.
+- `limner.syntax`, `limner.components.markdown`, and `limner.streaming` still
+  use legacy text handling and are experimental.
+- `limner.render` (its render loop performs terminal effects directly),
+  `limner.events`, and `limner.state` remain experimental; the REVIEW E1–E5
+  render-loop, terminal-input, and event-concurrency work is deferred (beads
+  2.3–2.5 are out of scope for this project).
+- There is no terminal input layer; `limner.tty` is not implemented.
+- The top-level `limner` namespace is deprecated; require the focused
+  namespaces instead.
+
+The experimental render buffer stores grapheme clusters and style values,
+including continuation cells for wide clusters.
 
 ## Installation
 
