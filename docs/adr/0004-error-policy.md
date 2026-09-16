@@ -137,9 +137,12 @@ caller believes an option is in effect that is not, so those throw.
 | `:limner.layout/unknown-layout-type` | `limner.layout/layout` | `:type` is not stack, hsplit, grid, or overlay |
 | `:limner.layout/empty-components` | `limner.layout/stack`, `hsplit`, `grid` | component collection is empty |
 | `:limner.layout/invalid-grid` | `limner.layout/grid` | `:columns`/`:rows` missing or not positive integers |
-| `:limner.render/invalid-string` | `limner.render/write-string-to-buffer` | content is not a string |
+| `:limner.render/invalid-string` | `limner.render/write-string-to-buffer`, `cell` | content is not a string |
 | `:limner.render/invalid-lines` | `limner.render/write-lines-to-buffer` | a line is not a string |
 | `:limner.render/invalid-render-output` | `limner.render/validate-render-output` | `render-fn` did not return a sequence of strings |
+| `:limner.render/invalid-callback` | `limner.render/create-render-loop` | `:render-fn`, `:on-frame`, or `:on-error` is not a function |
+| `:limner.render/invalid-dimension` | `limner.render/create-buffer` | a buffer dimension is not a non-negative integer |
+| `:limner.events/invalid-argument` | `limner.events/create-async-event-processor`, `create-async-event-system` | a required option is missing or not a function |
 
 ## Consequences
 
