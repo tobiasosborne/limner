@@ -1,5 +1,11 @@
 (ns limner.components.progress
-  "Progress indicators - spinners, bars, step indicators, and pulse effects"
+  "Experimental progress indicators: spinners, bars, steps, and pulse effects.
+
+  Constructors return plain immutable maps and rendering returns strings.
+  Spinner styles are a closed vocabulary because an unknown style otherwise
+  creates nil frames and fails later during animation. Unknown styles and
+  missing, empty, or non-string custom frames therefore throw `ex-info` with
+  `:limner.components.progress/invalid-spinner-style` (ADR 0004)."
   (:require [clojure.string :as str]
             [limner.core :as core]))
 
@@ -17,6 +23,22 @@
    :square ["◰" "◳" "◲" "◱"]
    :toggle ["⊶" "⊷"]})
 
+(defn- spinner-frames [style frames]
+  (cond
+    (contains? spinner-styles style)
+    (get spinner-styles style)
+
+    (and (= :custom style) (sequential? frames) (seq frames)
+         (every? string? frames))
+    (vec frames)
+
+    :else
+    (throw (ex-info "Spinner style must be known, or :custom with non-empty string frames"
+                    {:limner/error :limner.components.progress/invalid-spinner-style
+                     :style style :frames frames
+                     :known-styles (sort (keys spinner-styles))
+                     :limner/hint "Use a key from spinner-styles or pass :style :custom with :frames"}))))
+
 ;; ────────────────────── Spinner Component ──────────────────────
 (defn spinner
   "Create a spinner component
@@ -29,7 +51,7 @@
            color :cyan}}]
   {:type :spinner
    :style style
-   :frames (if (= style :custom) frames (get spinner-styles style))
+   :frames (spinner-frames style frames)
    :frame 0
    :color color})
 

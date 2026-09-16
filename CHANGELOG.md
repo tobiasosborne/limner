@@ -25,6 +25,9 @@ The following functions changed their error behaviour:
   `:limner.borders/invalid-border-style`.
 - `limner.borders/draw-titled-box` throws
   `:limner.borders/invalid-title-pos` instead of defaulting to `:left`.
+- `limner.components.progress/spinner` throws
+  `:limner.components.progress/invalid-spinner-style` for unknown styles or
+  missing, empty, or non-string custom frames instead of creating nil frames.
 - `limner.borders/draw-box`, `draw-titled-box`, `add-shadow`,
   `add-heavy-shadow`, `side-by-side`, and `colorize-border` no longer catch
   and return a placeholder box, the input, or `[]`.
@@ -48,7 +51,8 @@ The following functions changed their error behaviour:
   render loop's opt-in `:on-error` keeps the last good frame.
 - `limner.render/setup-terminal` and `restore-terminal` no longer swallow
   errors; the render loop no longer prints errors, resize messages, or stop
-  warnings, and records them in its stats and `:on-error` callback instead.
+  warnings. Render errors are retained in its stats and sent to its opt-in
+  `:on-error` callback.
 - `limner.events/dispatch-key` propagates a handler exception instead of
   logging it and returning the old state; the async event processor routes
   handler errors and timeouts to its `:on-error`/`:on-timeout` callbacks and

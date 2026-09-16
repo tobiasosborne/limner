@@ -6,6 +6,7 @@
             [limner.ansi.sgr :as sgr]
             [limner.borders :as borders]
             [limner.core :as core]
+            [limner.events :as events]
             [limner.layout :as layout]
             [limner.render :as render]
             [limner.text :as text]
@@ -164,6 +165,12 @@
          (thrown-class #(render/create-render-loop (atom {}) :render-fn nil))))
   (is (= :limner.render/invalid-render-output
          (thrown-class #(#'render/validate-render-output nil "test render")))))
+
+(deftest event-processor-argument-errors-are-exact
+  (is (= :limner.events/invalid-argument
+         (thrown-class #(events/create-async-event-processor))))
+  (is (= :limner.events/invalid-argument
+         (thrown-class #(events/create-async-event-system)))))
 
 ;; ────────────────────── limner.text and limner.unicode ──────────────────────
 

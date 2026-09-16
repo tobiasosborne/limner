@@ -21,6 +21,20 @@
       (is (= :custom (:style spinner)))
       (is (= frames (:frames spinner))))))
 
+(deftest test-spinner-rejects-unknown-or-empty-styles
+  (doseq [[style frames] [[:unknown nil]
+                          [:custom nil]
+                          [:custom []]
+                          [:custom ["ok" 42]]]]
+    (let [data (try
+                 (progress/spinner :style style :frames frames)
+                 nil
+                 (catch clojure.lang.ExceptionInfo e (ex-data e)))]
+      (is (= :limner.components.progress/invalid-spinner-style
+             (:limner/error data)))
+      (is (= style (:style data)))
+      (is (= frames (:frames data))))))
+
 (deftest test-spinner-frames
   (testing "Spinner advances through frames"
     (let [spinner (progress/spinner)

@@ -140,6 +140,10 @@ Creates a loading spinner.
 - `:style`: A key in `spinner-styles`, or `:custom` with a non-empty `:frames`
   sequence.
 
+Unknown styles and invalid custom frames throw `ex-info` with
+`:limner.components.progress/invalid-spinner-style`; they do not create a
+spinner that fails later in `tick`.
+
 ### `render`
 `(render component)`
 

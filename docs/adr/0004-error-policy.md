@@ -86,6 +86,8 @@ following throw a `:limner/error` exception rather than defaulting:
 - invalid colour specifications in `limner.core/color`;
 - unknown border styles in `limner.borders`;
 - unknown `:title-pos` values in `limner.borders/draw-titled-box`;
+- unknown spinner styles, or invalid custom frames, in
+  `limner.components.progress/spinner`;
 - unknown layout `:type` values in `limner.layout/layout`;
 - invalid constraint types in `limner.layout/validate-constraint`.
 
@@ -107,6 +109,7 @@ caller believes an option is in effect that is not, so those throw.
 | `:limner.core/invalid-color-index` | `limner.core/color-256`, `bg-256` | index is not an integer 0..255 |
 | `:limner.core/invalid-color` | `limner.core/color` | spec is not a known colour |
 | `:limner.core/invalid-string` | `limner.core/color` | text is not a string |
+| `:limner.components.progress/invalid-spinner-style` | `limner.components.progress/spinner` | style is unknown, or `:custom` frames are missing, empty, or not strings |
 | `:limner.text/invalid-input` | `limner.text` column operations | input is not a string or styled-text vector |
 | `:limner.text/invalid-options` | `limner.text` width operations | options are not a map, contain an unsupported key, or set `:ambiguous-width` to something other than 1 or 2 |
 | `:limner.text/invalid-bounds` | `limner.text/slice-columns` | bounds are not ordered non-negative integers |
