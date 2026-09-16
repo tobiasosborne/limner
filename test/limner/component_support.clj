@@ -4,9 +4,9 @@
   Components render terminal strings. A failure that prints the two strings
   raw is unreadable, because the escape that matters is invisible; `visible`
   makes every ESC explicit and `assert-lines` puts it in the assertion
-  message. The generators cover the three text classes the audit found
-  broken: CJK wide clusters, emoji ZWJ sequences, and text that already
-  carries an ANSI style."
+  message. The generators cover the text classes the audit found broken: CJK
+  wide clusters, emoji ZWJ sequences, explicit zero-width default-ignorables,
+  and text that already carries an ANSI style."
   (:require [clojure.string :as str]
             [clojure.test :refer [is]]
             [clojure.test.check.generators :as gen]
@@ -44,11 +44,20 @@
 (def ^:private emoji-fragments
   ["😀" "👩‍🔬" "🇩🇪" "⚡" "🎉" "🅰"])
 
+(def wide-fragment-gen
+  "A fragment containing at least one display-width-two grapheme."
+  (gen/elements (concat cjk-fragments (remove #{"🅰"} emoji-fragments))))
+
+(def zero-width-fragment-gen
+  "A non-empty fragment whose grapheme clusters occupy zero terminal columns."
+  (gen/elements ["\u00AD" "\u2060" "\uFEFF"]))
+
 (def fragment-gen
   "A short user-visible fragment drawn from the audit's problem classes."
   (gen/one-of
-   [(gen/elements (concat cjk-fragments emoji-fragments
-                          ["hello" "a b" "x" "" "  spaced  "]))
+   [wide-fragment-gen
+    zero-width-fragment-gen
+    (gen/elements ["hello" "a b" "x" "" "  spaced  " "🅰"])
     (gen/fmap #(core/color :red %) (gen/elements ["Red" "赤" "🔴"]))
     (gen/fmap #(core/color :bold %) (gen/elements ["bold" "太字"]))
     (gen/fmap #(core/color :underline %)

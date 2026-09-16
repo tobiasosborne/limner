@@ -151,35 +151,91 @@
    ["src/limner/borders/effects.clj" 'limner.borders.effects/side-by-side 'count]
    "Counts box rows to pad the shorter column; never measures text."
 
-   ["src/limner/layout.clj" 'count]
-   "Layout counts rows, cells, and flex items; text is measured by limner.text."
+   ["src/limner/layout.clj" 'limner.layout/resolve-flex-constraints 'count]
+   "Counts flex-item maps when distributing numeric space."
+   ["src/limner/layout.clj" 'limner.layout/resolve-flex-constraints 'nth]
+   "Indexes numeric floor and exact-share vectors."
+   ["src/limner/layout.clj" 'limner.layout/stack 'count]
+   "Counts component maps and indexes the resolved numeric height vector."
+   ["src/limner/layout.clj" 'limner.layout/stack 'nth]
+   "Indexes the resolved numeric height vector."
+   ["src/limner/layout.clj" 'limner.layout/hsplit 'count]
+   "Counts component maps when reserving inter-component spacing."
+   ["src/limner/layout.clj" 'limner.layout/hsplit 'nth]
+   "Indexes the resolved numeric width vector."
+   ["src/limner/layout.clj" 'limner.layout/grid 'count]
+   "Counts component maps to derive the grid row count."
+   ["src/limner/layout.clj" 'limner.layout/pad-to-box 'count]
+   "Counts already-rendered rows when padding height."
 
-   ["src/limner/layout.clj" 'nth]
-   "Layout indexes numeric share vectors; text is measured by limner.text."
+   ["src/limner/table.clj" 'limner.table/normalize-rows 'count]
+   "Counts row cells to enforce rectangular structure."
+   ["src/limner/table.clj" 'limner.table/normalize-aligns 'count]
+   "Counts alignment entries against the numeric column count."
+   ["src/limner/table.clj" 'limner.table/render-row 'nth]
+   "Indexes per-column width and alignment vectors."
+   ["src/limner/table.clj" 'limner.table/table 'count]
+   "Counts rows and columns; cell strings are measured by limner.text."
+   ["src/limner/table.clj" 'limner.table/table 'nth]
+   "Indexes cells by numeric column; cell strings are measured by limner.text."
 
-   ["src/limner/table.clj" 'count]
-   "Table counts rows and columns; cells are measured by limner.text."
+   ["src/limner/components/list.clj" 'limner.components.list/filtered-item-indices 'count]
+   "Counts item records to construct their numeric indexes."
+   ["src/limner/components/list.clj" 'limner.components.list/clamp-selection 'count]
+   "Counts filtered item records to clamp a numeric selection."
+   ["src/limner/components/list.clj" 'limner.components.list/select-item 'count]
+   "Counts filtered item records to validate an index."
+   ["src/limner/components/list.clj" 'limner.components.list/select-next 'count]
+   "Counts filtered item records for selection navigation."
+   ["src/limner/components/list.clj" 'limner.components.list/select-prev 'count]
+   "Counts filtered item records for selection navigation."
+   ["src/limner/components/list.clj" 'limner.components.list/select-last 'count]
+   "Counts filtered item records to select the last index."
+   ["src/limner/components/list.clj" 'limner.components.list/get-current-item 'count]
+   "Counts filtered item records to validate a selection index."
+   ["src/limner/components/list.clj" 'limner.components.list/adjust-scroll 'count]
+   "Counts item records to clamp a viewport offset."
+   ["src/limner/components/list.clj" 'limner.components.list/prefix-columns 'count]
+   "Counts item records only to size the largest decimal index."
+   ["src/limner/components/list.clj" 'limner.components.list/render-list 'count]
+   "Counts rendered item rows when padding viewport height."
+   ["src/limner/components/list.clj" 'limner.components.list/item-count 'count]
+   "Returns the number of item records."
+   ["src/limner/components/list.clj" 'limner.components.list/filtered-item-count 'count]
+   "Returns the number of filtered item records."
+   ["src/limner/components/list.clj" 'limner.components.list/selection-count 'count]
+   "Counts selected numeric indexes."
+   ["src/limner/components/list.clj" 'limner.components.list/remove-item 'count]
+   "Counts item records to validate a removal index."
 
-   ["src/limner/table.clj" 'nth]
-   "Table indexes its per-column width vector; cells use limner.text."
+   ["src/limner/components/input.clj" 'limner.components.input/cluster-count 'count]
+   "Counts grapheme records already segmented by limner.text."
+   ["src/limner/components/input.clj" 'limner.components.input/history-prev 'count]
+   "Counts history entries, not text."
+   ["src/limner/components/input.clj" 'limner.components.input/history-next 'count]
+   "Counts history entries, not text."
+   ["src/limner/components/input.clj" 'limner.components.input/format-line-with-cursor 'count]
+   "Counts grapheme records already segmented by limner.text."
+   ["src/limner/components/input.clj" 'limner.components.input/format-line-with-cursor 'nth]
+   "Indexes a grapheme record vector produced by limner.text."
 
-   ["src/limner/components/list.clj" 'count]
-   "List counts items and viewport rows; labels are measured by limner.text."
+   ["src/limner/components/progress.clj" 'limner.components.progress/tick 'count]
+   "Counts animation frame records."
+   ["src/limner/components/progress.clj" 'limner.components.progress/render-spinner 'nth]
+   "Indexes an animation frame vector."
+   ["src/limner/components/progress.clj" 'limner.components.progress/render-step-indicator 'count]
+   "Counts label records before numeric indexing."
+   ["src/limner/components/progress.clj" 'limner.components.progress/render-step-indicator 'nth]
+   "Indexes the current label record."
 
-   ["src/limner/components/input.clj" 'count]
-   "Input counts grapheme units and history entries; boundaries come from limner.text."
-
-   ["src/limner/components/input.clj" 'nth]
-   "Input indexes its own grapheme-unit vector; text is sliced by limner.text."
-
-   ["src/limner/components/progress.clj" 'count]
-   "Progress counts frames and labels; rendered text is built by limner.text."
-
-   ["src/limner/components/progress.clj" 'nth]
-   "Progress indexes its own frame and label vectors, never text columns."
-
-   ["src/limner/components/panel.clj" 'count]
-   "Panel counts content lines and children; line text is measured by limner.text."})
+   ["src/limner/components/panel.clj" 'limner.components.panel/render-expanded 'count]
+   "Counts padded content rows for scrolling."
+   ["src/limner/components/panel.clj" 'limner.components.panel/scroll-to 'count]
+   "Counts content rows to clamp the viewport offset."
+   ["src/limner/components/panel.clj" 'limner.components.panel/nest-panels 'count]
+   "Counts child panel results before inserting separator rows."
+   ["src/limner/components/panel.clj" 'limner.components.panel/can-scroll-down? 'count]
+   "Counts content rows to compute the final viewport offset."})
 
 (defn- banned-use [form]
   (cond
@@ -213,7 +269,13 @@
   (testing "no component measures or slices user-visible text with UTF-16 tools"
     (doseq [{:keys [path form name]} (component-entries)
             use (distinct (keep banned-use (walk form)))]
-      (is (or (contains? allowed-component-uses [path name (symbol use)])
-              (contains? allowed-component-uses [path (symbol use)]))
+      (is (contains? allowed-component-uses [path name (symbol use)])
           (str path " / " name " uses " use "; route it through limner.text or "
                "add it to allowed-component-uses with a reason.")))))
+
+(deftest component-text-allow-list-is-var-scoped
+  (testing "every exception names one exact source var and one operation"
+    (doseq [[allow-key reason] allowed-component-uses]
+      (is (= 3 (count allow-key))
+          (str "Over-broad text-operation exception " (pr-str allow-key)
+               " could hide a future visible-text regression: " reason)))))
