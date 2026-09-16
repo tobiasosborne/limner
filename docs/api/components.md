@@ -71,6 +71,11 @@ Creates an input component.
 - `:max-length`: Maximum value length in grapheme clusters.
 - `:validator`: Function `(fn [val] -> bool)`.
 
+A width that is not a non-negative integer, or a bordered width below four,
+throws `:limner.components.input/invalid-width`. Long inline or border labels
+and status indicators are clipped inside the configured width rather than
+widening it.
+
 ### Text Manipulation
 - `(insert-char state char)`
 - `(delete-char state)`
@@ -105,7 +110,9 @@ Creates a list component.
 Rendering measures, truncates, and pads every label in terminal display
 columns through `limner.text`, so CJK and emoji items fit and a label that
 already carries ANSI keeps its style. A `:width` too small for the item prefix
-or filter prompt throws `:limner.components.list/invalid-width`.
+or filter prompt, or a non-integer width, throws
+`:limner.components.list/invalid-width`. A long border label is truncated
+inside the configured width; it cannot widen the component.
 
 ### Operations
 - `(select-next state n)`

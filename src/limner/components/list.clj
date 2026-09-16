@@ -287,29 +287,43 @@
 
 (defn- prefix-columns
   "Display width of the per-row prefix (cursor, checkbox, index)."
-  [{:keys [cursor-char multi-select show-indices]}]
-  (+ (text/width (str cursor-char " "))
-     (if multi-select 2 0)
-     (if show-indices 5 0)))
+  [{:keys [cursor-char checkbox-checked checkbox-unchecked multi-select
+           show-indices items]}]
+  (let [cursor-width (max 2 (text/width (str cursor-char " ")))
+        checkbox-width (if multi-select
+                         (inc (max (text/width checkbox-checked)
+                                   (text/width checkbox-unchecked)))
+                         0)
+        last-index (max 0 (dec (count items)))
+        index-width (if show-indices
+                      (+ (max 3 (text/width (str last-index))) 2)
+                      0)]
+    (+ cursor-width checkbox-width index-width)))
 
 (defn- validate-render-width
   "Return the content columns, throwing when the prefix cannot fit."
   [list-state]
-  (let [columns (content-columns list-state)
-        prefix (prefix-columns list-state)
-        filter-minimum (if (:show-filter list-state)
-                         (+ (text/width "Filter: ") 3)
-                         0)
-        minimum (max (+ prefix 3) filter-minimum)]
-    (when (< columns minimum)
-      (throw (ex-info "List width is too small for its item prefix"
+  (let [width (:width list-state)]
+    (when-not (and (integer? width) (<= 0 width))
+      (throw (ex-info "List width must be a non-negative integer"
                       {:limner/error :limner.components.list/invalid-width
-                       :width (:width list-state)
-                       :border (:border list-state)
-                       :content-columns columns
-                       :minimum-content-columns minimum
-                       :limner/hint "Increase :width, or disable :show-indices, :multi-select, or :show-filter"})))
-    columns))
+                       :width width :type (type width)
+                       :limner/hint "Use an integer width large enough for the configured prefix"})))
+    (let [columns (content-columns list-state)
+          prefix (prefix-columns list-state)
+          filter-minimum (if (:show-filter list-state)
+                           (+ (text/width "Filter: ") 3)
+                           0)
+          minimum (max (+ prefix 3) filter-minimum)]
+      (when (< columns minimum)
+        (throw (ex-info "List width is too small for its item prefix"
+                        {:limner/error :limner.components.list/invalid-width
+                         :width width
+                         :border (:border list-state)
+                         :content-columns columns
+                         :minimum-content-columns minimum
+                         :limner/hint "Increase :width, or disable :show-indices, :multi-select, or :show-filter"})))
+      columns)))
 
 (defn- item-prefix
   "Styled cursor, checkbox, and index prefix for one row."
@@ -378,9 +392,11 @@
   exactly `:width` display columns wide."
   [{:keys [border border-style label] :as list-state}]
   (let [content-lines (render-list list-state)
+        title (when (and border label)
+                (text/to-ansi (text/truncate label (content-columns list-state))))
         final-lines (if border
-                      (if label
-                        (borders/draw-titled-box label content-lines
+                      (if title
+                        (borders/draw-titled-box title content-lines
                                                 :border-style border-style
                                                 :title-pos :left)
                         (borders/draw-box content-lines :border-style border-style))

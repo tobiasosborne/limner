@@ -452,18 +452,26 @@
       (is (= "┌──────────────────┐" (first rendered)))
       (is (= "└──────────────────┘" (last rendered))))))
 
+(deftest list-label-cannot-widen-the-configured-width
+  (testing "A long label is truncated inside the existing top border"
+    (component/assert-lines
+     ["┌ a very … ┐"
+      "│  > \u001B[36mx   \u001B[39m  │"
+      "└──────────┘"]
+     (list/render (list/list-component :items ["x"] :height 1 :width 12
+                                       :label "a very long title")))))
+
 (deftest list-narrow-width-throws
   (testing "A width too small for the item prefix throws a list error"
-    (is (= :limner.components.list/invalid-width
-           (:limner/error (try (list/render (list/list-component :items ["x"] :width 4))
-                               nil
-                               (catch clojure.lang.ExceptionInfo e (ex-data e))))))
-    (is (= :limner.components.list/invalid-width
-           (:limner/error (try (list/render (list/list-component
-                                             :items ["x"] :width 10
-                                             :show-filter true :border false))
-                               nil
-                               (catch clojure.lang.ExceptionInfo e (ex-data e))))))))
+    (doseq [state [(list/list-component :items ["x"] :width 4)
+                   (list/list-component :items ["x"] :width 10
+                                        :show-filter true :border false)
+                   (list/list-component :items ["x"] :width "12")]]
+      (is (= :limner.components.list/invalid-width
+             (:limner/error
+              (try (list/render state)
+                   nil
+                   (catch clojure.lang.ExceptionInfo e (ex-data e)))))))))
 
 (deftest selection-keeps-visible
   (testing "Moving down scrolls the selection into view"

@@ -414,6 +414,27 @@
      [" \u001B[7;36mT\u001B[27mype here\u001B[39m          "]
      (input/render (input/input :placeholder "Type here" :border false :width 20)))))
 
+(deftest fixed-width-label-and-status-goldens
+  (testing "A long border label is truncated instead of widening the input"
+    (component/assert-lines
+     ["┌ a very … ┐"
+      "│  x\u001B[7m \u001B[27m      │"
+      "└──────────┘"]
+     (input/render (input/input :value "x" :width 12
+                                :label "a very long title"))))
+  (testing "A disabled indicator is clipped when only one content column fits"
+    (component/assert-lines
+     ["┌───┐" "│   │" "└───┘"]
+     (input/render (input/input :value "x" :width 5 :disabled true)))))
+
+(deftest invalid-input-width-throws-the-component-class
+  (doseq [width [3 -1 4.5 "12"]]
+    (is (= :limner.components.input/invalid-width
+           (:limner/error
+            (try (input/render (input/input :value "x" :width width))
+                 nil
+                 (catch clojure.lang.ExceptionInfo e (ex-data e))))))))
+
 (deftest trailing-newline-cursor-golden
   (testing "A value ending in a newline puts the cursor on the new empty line"
     (component/assert-lines

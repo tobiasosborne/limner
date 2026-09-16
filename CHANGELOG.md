@@ -78,6 +78,10 @@ The following functions changed their error behaviour:
   than a UTF-16 offset. For text without emoji or combining sequences the two
   agree; for other text the index changes meaning. `:max-length` likewise
   counts grapheme clusters.
+- `limner.components.list` and `limner.components.input` now interpret
+  `:width` as total rendered width including the border, rather than allowing
+  the border to add columns. Borderless input labels render inline, and a
+  multiline input without a status no longer adds an empty status row.
 - `limner.components.progress` `:square` spinner frames changed from the
   `:box` glyphs to distinct quadrant blocks, so every named style animates
   differently (REVIEW F4).
@@ -156,12 +160,18 @@ The following functions changed their error behaviour:
 - Made `select-next` and `select-prev` adjust the scroll offset to keep the
   selection visible, and made `set-filter` reset both selection and scroll in
   every branch (REVIEW F2).
+- Truncated list border labels inside the configured width and validated the
+  complete cursor/checkbox/index prefix, so custom glyphs and long indexes
+  cannot widen a rendered list.
 - Made `limner.components.input` move, insert, delete, and backspace by
   grapheme cluster through `limner.text`, made `history-prev` return the input
   unchanged when the history is empty, and rendered the inverse-video cursor
   as a style span instead of an escape spliced into a coloured placeholder.
   A multiline value ending in a newline now puts the cursor on the new empty
   row without adding a stray row (REVIEW F1/B1/B3).
+- Kept long input labels and narrow status indicators inside `:width`; invalid
+  widths now throw `:limner.components.input/invalid-width` before reaching a
+  lower-level slice operation.
 - Made `limner.components.progress/complete?` compare progress-bar values
   numerically, so `100` and `100.0` both complete (REVIEW F4).
 - Gave the `:square` spinner style its own frames and built progress-bar fills

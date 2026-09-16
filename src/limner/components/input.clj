@@ -9,7 +9,8 @@
   substring (REVIEW F1/B1/B3).
 
   Input values are plain text. `:width` is the total rendered width including
-  the border; every rendered line is exactly that many display columns."
+  the border; every rendered line is exactly that many display columns.
+  Invalid widths throw `:limner.components.input/invalid-width` (ADR 0004)."
   (:refer-clojure :exclude [empty?])
   (:require [clojure.string :as str]
             [limner.borders :as borders]
@@ -234,8 +235,13 @@
   (let [width (max 0 width)
         units (text/clusters display)
         n (count units)]
-    (if-not show-cursor?
+    (cond
+      (zero? width) ""
+
+      (not show-cursor?)
       (text/to-ansi (text/pad-right (text/slice-columns display 0 width) width))
+
+      :else
       (let [cursor (max 0 (min cursor-pos n))
             cursor-col (reduce + 0 (map :width (subvec units 0 cursor)))
             start-col (if (>= cursor-col width) (max 0 (- cursor-col (dec width))) 0)
@@ -256,8 +262,17 @@
         (text/to-ansi (text/pad-right body width))))))
 
 ;; ────────────────────── Rendering ──────────────────────
-(defn- content-columns [input-state]
-  (max 0 (- (:width input-state) (if (:border input-state) 4 0))))
+(defn- content-columns [{:keys [width border]}]
+  (when-not (and (integer? width) (<= 0 width))
+    (throw (ex-info "Input width must be a non-negative integer"
+                    {:limner/error :limner.components.input/invalid-width
+                     :width width :type (type width)})))
+  (when (and border (< width 4))
+    (throw (ex-info "Bordered input width must be at least four columns"
+                    {:limner/error :limner.components.input/invalid-width
+                     :width width :border border
+                     :limner/hint "Use :width 4 or greater, or disable :border"})))
+  (- width (if border 4 0)))
 
 (defn- status-text [{:keys [disabled invalid]}]
   (cond
@@ -279,7 +294,7 @@
                                              (:cursor input-state)
                                              field
                                              (not (:disabled input-state)))]
-    [(text/to-ansi (text/concat " " prefix cursor-line status))]))
+    [(pad-line (text/concat " " prefix cursor-line status) columns)]))
 
 (defn- cursor-location
   "Return `[line grapheme-column]` for grapheme cursor `cursor` in `value`."
@@ -328,9 +343,11 @@
   (let [content-lines (if multiline
                         (render-multiline input-state)
                         (render-single-line input-state))
+        title (when (and border label)
+                (text/to-ansi (text/truncate label (content-columns input-state))))
         final-lines (if border
-                      (if label
-                        (borders/draw-titled-box label content-lines
+                      (if title
+                        (borders/draw-titled-box title content-lines
                                                 :border-style border-style
                                                 :title-pos :left)
                         (borders/draw-box content-lines :border-style border-style))
