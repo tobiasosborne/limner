@@ -16,7 +16,11 @@
   which is not such a character. Limner treats each unpaired surrogate as an
   opaque one-unit cluster and forces boundaries on both sides; a valid pair is
   decoded as one code point. This total-input extension is documented in ADR
-  0002 and does not change conforming Unicode input."
+  0002 and does not change conforming Unicode input.
+
+  A non-string input throws `ex-info` with
+  `:limner.unicode.grapheme/invalid-string`; a missing reducing function
+  throws with `:limner.unicode.grapheme/invalid-reduce-fn` (ADR 0004)."
   (:require [limner.unicode :as unicode]))
 
 (defn- grapheme-code [packed]
@@ -28,7 +32,8 @@
 (defn- fail-unless-string [text]
   (when-not (string? text)
     (throw (ex-info "Grapheme segmentation requires a string"
-                    {:text text :action "Pass a non-nil string"}))))
+                    {:limner/error :limner.unicode.grapheme/invalid-string
+                     :text text :action "Pass a non-nil string"}))))
 
 (defn- paired-high-surrogate?
   [^String text index length]
@@ -187,7 +192,8 @@
   (fail-unless-string text)
   (when-not (ifn? rf)
     (throw (ex-info "Grapheme reduction requires a reducing function"
-                    {:reducing-function rf})))
+                    {:limner/error :limner.unicode.grapheme/invalid-reduce-fn
+                     :reducing-function rf})))
   (cond
     (zero? (.length ^String text)) init
     (printable-ascii? text) (reduce-ascii text rf init)

@@ -25,7 +25,10 @@
   `docs/api/ansi.md` and `scripts/ansi_benchmark.clj`.
 
   `strip` retains only text tokens. SGR interpretation and OSC 8 extraction are
-  helpers over tokens, not competing scanners."
+  helpers over tokens, not competing scanners.
+
+  Non-string input throws `ex-info` with `:limner.ansi/invalid-input`
+  (ADR 0004)."
   (:require [limner.ansi.sgr :as sgr])
   (:import [java.util.regex Pattern]))
 
@@ -38,7 +41,8 @@
 (defn- fail-unless-string [text]
   (when-not (string? text)
     (throw (ex-info "ANSI tokenization requires a string"
-                    {:text text :action "Pass a non-nil string"}))))
+                    {:limner/error :limner.ansi/invalid-input
+                     :text text :action "Pass a non-nil string"}))))
 
 (defn- raw [^String text start end]
   (subs text start end))

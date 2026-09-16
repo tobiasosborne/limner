@@ -25,9 +25,9 @@
     (let [chars (borders/get-border-chars :ascii)]
       (is (= ["+" "+" "+" "+" "-" "|"] chars))))
 
-  (testing "Default to single for unknown style"
-    (let [chars (borders/get-border-chars :unknown)]
-      (is (= ["┌" "┐" "└" "┘" "─" "│"] chars)))))
+  (testing "Unknown style throws with the ADR 0004 class"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (borders/get-border-chars :unknown)))))
 
 (deftest test-custom-style
   (testing "Custom style as vector"

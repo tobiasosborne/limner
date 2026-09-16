@@ -9,7 +9,12 @@
 
   Column functions accept ANSI strings or styled values. Their optional map
   supports `:ambiguous-width` 1 (default) or 2. Slicing and truncation never
-  split a grapheme; a partly covered wide cluster becomes styled spaces."
+  split a grapheme; a partly covered wide cluster becomes styled spaces.
+
+  Invalid input throws `ex-info` with an ADR 0004 class:
+  `:limner.text/invalid-input`, `:limner.text/invalid-options`,
+  `:limner.text/invalid-bounds`, `:limner.text/invalid-target`,
+  `:limner.text/invalid-fill`, or `:limner.text/invalid-width`."
   (:refer-clojure :exclude [concat lines])
   (:require [limner.text.columns :as columns]
             [limner.text.style :as style]))
@@ -69,7 +74,8 @@
   (let [unknown (seq (remove #{:ellipsis :ambiguous-width} (keys supplied)))]
     (when unknown
       (throw (ex-info "Truncate options contain unsupported keys"
-                      {:options supplied :unsupported (vec unknown)})))
+                      {:limner/error :limner.text/invalid-options
+                       :options supplied :unsupported (vec unknown)})))
     (columns/truncate input target ellipsis {:ambiguous-width ambiguous-width})))
 
 (defn wrap

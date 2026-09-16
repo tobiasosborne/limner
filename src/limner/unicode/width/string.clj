@@ -5,7 +5,10 @@
   accumulating ADR 0001 cluster state from the same packed property lookup.
   It never materialises cluster strings. Whole printable-ASCII, Latin-1, and
   BMP CJK/Hangul runs use proven shortcuts; the public entry point and option
-  validation remain in `limner.unicode.width`."
+  validation remain in `limner.unicode.width`.
+
+  An unpaired surrogate throws `ex-info` with
+  `:limner.unicode.width.string/surrogate` (ADR 0004)."
   (:require [limner.unicode :as unicode]))
 
 (def ^:private category-shift 13)
@@ -15,9 +18,10 @@
 (defn- packed-code-point [code-point]
   (let [packed (unicode/packed-properties code-point)]
     (when (= 8 (bit-and 15 (bit-shift-right packed category-shift)))
-      (throw (ex-info "Width is undefined for a UTF-16 surrogate code point"
-                      {:code-point code-point
-                       :action "Pass a Unicode scalar value, not a UTF-16 code unit"})))
+    (throw (ex-info "Width is undefined for a UTF-16 surrogate code point"
+                    {:limner/error :limner.unicode.width.string/surrogate
+                     :code-point code-point
+                     :action "Pass a Unicode scalar value, not a UTF-16 code unit"})))
     packed))
 
 (defn- packed-width [packed ambiguous]

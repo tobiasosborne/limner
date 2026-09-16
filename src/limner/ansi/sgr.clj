@@ -4,7 +4,10 @@
   ECMA-48 Section 8.3.117 defines the base attributes and resets. The xterm
   table in `reference/specs/xterm-ctlseqs.txt` adds bright colors and the
   ISO-8613-6 colon color forms plus compatible semicolon forms. Unknown or
-  incomplete parameters remain explicit operations rather than disappearing."
+  incomplete parameters remain explicit operations rather than disappearing.
+
+  A token that is not a CSI sequence with final byte `m` throws `ex-info`
+  with `:limner.ansi.sgr/invalid-token` (ADR 0004)."
   (:require [clojure.string :as str]))
 
 (defn- split-on [^String value separator]
@@ -114,7 +117,8 @@
 (defn parse [token]
   (when-not (and (map? token) (= :csi (:type token)) (= \m (:final token)))
     (throw (ex-info "SGR parsing requires a CSI token with final byte m"
-                    {:token token :action "Pass an SGR token from limner.ansi/tokenize"})))
+                    {:limner/error :limner.ansi.sgr/invalid-token
+                     :token token :action "Pass an SGR token from limner.ansi/tokenize"})))
   (let [parts (split-on (:params token) \;)]
     (loop [index 0, operations (transient [])]
       (if (= index (count parts))

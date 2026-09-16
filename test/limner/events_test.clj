@@ -520,8 +520,7 @@
             (when ((:running? processor))
               ((:stop! processor))))))
       (is (= 1 (:timeouts ((:get-stats processor)))))
-      (is (= "Warning: Event handler timeout after 50ms: {:type :slow}\n"
-             (str errors))))))
+      (is (= "" (str errors))))))
 
 (deftest test-async-processor-error-handling
   (testing "Event handler error handling"
@@ -548,10 +547,7 @@
       (is (= {:events-processed 1 :errors 1 :timeouts 0
               :batches-processed 0}
              ((:get-stats processor))))
-      (is (= (str "Error in event handler: "
-                  (with-out-str (print handler-error))
-                  "\n")
-             (str errors))))))
+      (is (= "" (str errors))))))
 
 (deftest test-create-async-event-system
   (testing "Complete async event system"

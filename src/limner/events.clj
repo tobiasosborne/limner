@@ -1,21 +1,24 @@
 (ns limner.events
-  "Event system - keyboard and mouse input handling"
+  "Experimental event system - keyboard and mouse input handling.
+
+  `parse-key` treats unrecognised terminal bytes as a `{:type :unknown}` parse
+  result rather than an error and never prints. Bad processor options throw
+  `ex-info` with `:limner.events/invalid-argument`. Handler errors and
+  timeouts in the async processor go to the `:on-error`/`:on-timeout`
+  callbacks and the stats map; the processor boundary belongs to bead
+  limner-2-5 (ADR 0004)."
   (:require [clojure.string :as str]
             [clojure.core.async :as async :refer [<! >! <!! >!! go go-loop chan close! timeout alt!]]))
 
-;; ────────────────────── Error Handling ──────────────────────
-
-(defn- safe-parse
-  "Safely parse input with error handling. Returns nil on error."
-  [parse-fn input context]
-  (try
-    (parse-fn input)
-    (catch Exception e
-      (binding [*out* *err*]
-        (println (str "Warning: Error parsing " context ":") (.getMessage e)))
-      nil)))
-
 ;; ────────────────────── Key Event Parsing ──────────────────────
+
+(defn- parse-integer
+  "Parse a decimal string from untrusted terminal input; nil when it does not
+  fit a long. This is a parse result, not a swallowed error (ADR 0004)."
+  [s]
+  (try
+    (Long/parseLong s)
+    (catch NumberFormatException _ nil)))
 
 (def ^:private escape-sequences
   "Map of ANSI escape sequences to key names"
@@ -87,70 +90,52 @@
 (defn- parse-mouse-event
   "Parse mouse event from CSI sequence. Format: CSI M Cb Cx Cy or CSI < Cb ; Cx ; Cy M
 
-   Returns parsed mouse event map or nil if parsing fails.
-   Handles malformed input gracefully."
+   Returns parsed mouse event map or nil when the bytes do not form one.
+   Malformed input is a parse result, not an exception."
   [input]
   (when (and input (string? input))
-    (try
-      (cond
-        ;; SGR mouse format: ESC [ < button ; x ; y M/m
-        (str/starts-with? input "\u001b[<")
-        (when-let [[_ button x y release] (re-find #"\u001b\[<(\d+);(\d+);(\d+)([Mm])" input)]
-          (try
-            (let [btn (Integer/parseInt button)
-                  button-type (cond
-                                (= btn 0) :left
-                                (= btn 1) :middle
-                                (= btn 2) :right
-                                (= btn 64) :scroll-up
-                                (= btn 65) :scroll-down
-                                :else :unknown)
-                  parsed-x (Integer/parseInt x)
-                  parsed-y (Integer/parseInt y)]
-              ;; Validate parsed coordinates are reasonable
-              (when (and (>= parsed-x 0) (>= parsed-y 0)
-                        (< parsed-x 10000) (< parsed-y 10000))
-                {:type :mouse
-                 :button button-type
-                 :action (if (= release "m") :release :press)
-                 :x parsed-x
-                 :y parsed-y
-                 :raw input}))
-            (catch NumberFormatException e
-              (binding [*out* *err*]
-                (println "Warning: Invalid mouse coordinates in SGR format"))
-              nil)))
+    (cond
+      ;; SGR mouse format: ESC [ < button ; x ; y M/m
+      (str/starts-with? input "\u001b[<")
+      (when-let [[_ button x y release] (re-find #"\u001b\[<(\d+);(\d+);(\d+)([Mm])" input)]
+        (let [btn (parse-integer button)
+              parsed-x (parse-integer x)
+              parsed-y (parse-integer y)]
+          (when (and btn parsed-x parsed-y
+                     (>= parsed-x 0) (>= parsed-y 0)
+                     (< parsed-x 10000) (< parsed-y 10000))
+            {:type :mouse
+             :button (case btn
+                       0 :left
+                       1 :middle
+                       2 :right
+                       64 :scroll-up
+                       65 :scroll-down
+                       :unknown)
+             :action (if (= release "m") :release :press)
+             :x parsed-x
+             :y parsed-y
+             :raw input})))
 
-        ;; Normal mouse format: ESC [ M Cb Cx Cy
-        (str/starts-with? input "\u001b[M")
-        (when (>= (count input) 6)
-          (try
-            (let [cb (int (nth input 3))
-                  cx (- (int (nth input 4)) 32)
-                  cy (- (int (nth input 5)) 32)
-                  button (case (bit-and cb 3)
-                           0 :left
-                           1 :middle
-                           2 :right
-                           :unknown)]
-              ;; Validate parsed coordinates are reasonable
-              (when (and (>= cx 0) (>= cy 0))
-                {:type :mouse
-                 :button button
-                 :action :press
-                 :x cx
-                 :y cy
-                 :raw input}))
-            (catch Exception e
-              (binding [*out* *err*]
-                (println "Warning: Error parsing normal mouse format"))
-              nil)))
+      ;; Normal mouse format: ESC [ M Cb Cx Cy
+      (str/starts-with? input "\u001b[M")
+      (when (>= (count input) 6)
+        (let [cb (int (nth input 3))
+              cx (- (int (nth input 4)) 32)
+              cy (- (int (nth input 5)) 32)]
+          (when (and (>= cx 0) (>= cy 0))
+            {:type :mouse
+             :button (case (bit-and cb 3)
+                       0 :left
+                       1 :middle
+                       2 :right
+                       :unknown)
+             :action :press
+             :x cx
+             :y cy
+             :raw input})))
 
-        :else nil)
-      (catch Exception e
-        (binding [*out* *err*]
-          (println "Warning: Unexpected error parsing mouse event:" (.getMessage e)))
-        nil))))
+      :else nil)))
 
 (defn parse-key
   "Parse raw input string into a key event map.
@@ -159,9 +144,7 @@
 
    Handles malformed input gracefully and validates all parsed values."
   [input]
-  (when (and input (string? input))
-    (try
-      (when (seq input)
+  (when (and input (string? input) (seq input))
     (cond
       ;; Empty or nil
       (empty? input)
@@ -215,11 +198,7 @@
       ;; Unknown/unparseable
       :else
       {:type :unknown
-       :raw input}))
-      (catch Exception e
-        (binding [*out* *err*]
-          (println "Warning: Error parsing key event:" (.getMessage e)))
-        {:type :unknown :raw (str input)}))))
+       :raw input})))
 
 (defn key-combo
   "Create a key combo representation from key event or key spec.
@@ -272,24 +251,13 @@
   "Dispatch a key event to the appropriate handler in the registry.
    Returns the result of the handler or nil if no binding matched.
 
-   Handles handler errors gracefully - if a handler throws an exception,
-   it logs the error and returns the original state unchanged."
+   A handler exception propagates: the old code logged it and returned the
+   original state, which hid the bug (ADR 0004)."
   [registry event state]
-  (try
-    (let [bindings @(:bindings registry)
-          combo (key-combo event)]
-      (when-let [handler (get bindings combo)]
-        (try
-          (handler event state)
-          (catch Exception e
-            (binding [*out* *err*]
-              (println "Error in key handler for" combo ":" (.getMessage e)))
-            ;; Return original state on handler error
-            state))))
-    (catch Exception e
-      (binding [*out* *err*]
-        (println "Error dispatching key event:" (.getMessage e)))
-      state)))
+  (let [bindings @(:bindings registry)
+        combo (key-combo event)]
+    (when-let [handler (get bindings combo)]
+      (handler event state))))
 
 ;; ────────────────────── Focus Management ──────────────────────
 
@@ -540,6 +508,7 @@
 
           :else
           [(second val) :ok])))
+    ;; TODO(limner-2-5): async event-processor boundary; bead 2.5 owns it.
     (catch Exception e
       [e :error])))
 
@@ -583,9 +552,18 @@
              batch-events? on-error on-timeout]
       :or {handler-timeout-ms 5000
            batch-events? false}}]
-  {:pre [(some? event-queue)
-         (some? state-atom)
-         (fn? process-fn)]}
+  (when-not (some? event-queue)
+    (throw (ex-info "create-async-event-processor requires an :event-queue"
+                    {:limner/error :limner.events/invalid-argument
+                     :event-queue event-queue})))
+  (when-not (some? state-atom)
+    (throw (ex-info "create-async-event-processor requires a :state-atom"
+                    {:limner/error :limner.events/invalid-argument
+                     :state-atom state-atom})))
+  (when-not (fn? process-fn)
+    (throw (ex-info "create-async-event-processor requires a :process-fn function"
+                    {:limner/error :limner.events/invalid-argument
+                     :process-fn process-fn})))
 
   (let [event-chan (:chan event-queue)
         running (atom true)
@@ -630,32 +608,29 @@
                         :timeout
                         (do
                           (swap! stats update :timeouts inc)
-                          (binding [*out* *err*]
-                            (println (str "Warning: Event handler timeout after "
-                                         handler-timeout-ms "ms: " event)))
                           (when on-timeout
                             (try
                               (on-timeout event current-state)
                               (catch Exception e
-                                (binding [*out* *err*]
-                                  (println "Error in timeout callback:" e))))))
+                                ;; TODO(limner-2-5): record a broken callback.
+                                (swap! stats update :errors inc)
+                                (swap! stats assoc :last-callback-error e)))))
 
                         :error
                         (do
                           (swap! stats update :errors inc)
-                          (binding [*out* *err*]
-                            (println "Error in event handler:" new-state))
                           (when on-error
                             (try
                               (on-error new-state event current-state)
                               (catch Exception e
-                                (binding [*out* *err*]
-                                  (println "Error in error callback:" e))))))))))
+                                ;; TODO(limner-2-5): record a broken callback.
+                                (swap! stats assoc :last-callback-error e)))))))))
 
                 (catch Exception e
-                  (binding [*out* *err*]
-                    (println "Fatal error in event processor:" e))
-                  (swap! stats update :errors inc)))
+                  ;; TODO(limner-2-5): async event-processor boundary. Record
+                  ;; the error instead of printing into the user's TUI.
+                  (swap! stats update :errors inc)
+                  (swap! stats assoc :last-error e)))
 
               ;; Continue loop (recur in tail position)
               (recur))))]
@@ -666,8 +641,8 @@
               ;; Wait for processor to stop with timeout
               (let [result (deref stop-promise 2000 :timeout)]
                 (when (= result :timeout)
-                  (binding [*out* *err*]
-                    (println "Warning: Event processor did not stop within 2 seconds")))))
+                  ;; TODO(limner-2-5): record the stop timeout in stats.
+                  (swap! stats assoc :stop-timeout true))))
 
      :running? (fn [] @running)
 
@@ -713,8 +688,12 @@
            handler-timeout-ms 5000
            batch-events? false}
       :as opts}]
-  {:pre [(some? state-atom)
-         (fn? process-fn)]}
+  (when-not (some? state-atom)
+    (throw (ex-info "create-async-event-system requires a :state-atom"
+                    {:limner/error :limner.events/invalid-argument :state-atom state-atom})))
+  (when-not (fn? process-fn)
+    (throw (ex-info "create-async-event-system requires a :process-fn function"
+                    {:limner/error :limner.events/invalid-argument :process-fn process-fn})))
 
   (let [queue (create-event-queue :buffer-size buffer-size)
         processor (create-async-event-processor

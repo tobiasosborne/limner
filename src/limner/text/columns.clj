@@ -4,7 +4,12 @@
   ADR 0003 requires segmentation across style boundaries, not once per span.
   These functions therefore build one display-text stream, retain source
   events at UTF-16 offsets, and attach them to Unicode 17 grapheme units. Raw
-  controls never contribute width. Public callers use `limner.text`."
+  controls never contribute width. Public callers use `limner.text`.
+
+  Invalid input throws `ex-info` with an ADR 0004 class:
+  `:limner.text/invalid-input`, `:limner.text/invalid-options`,
+  `:limner.text/invalid-bounds`, `:limner.text/invalid-target`,
+  `:limner.text/invalid-fill`, or `:limner.text/invalid-width`."
   (:refer-clojure :exclude [lines])
   (:require [limner.ansi :as ansi]
             [limner.text.style :as style]
@@ -13,17 +18,19 @@
 
 (def ^:private option-keys #{:ambiguous-width})
 
-(defn- fail [message data] (throw (ex-info message data)))
+(defn- fail [error-class message data]
+  (throw (ex-info message (assoc data :limner/error error-class))))
 
 (defn options [value]
   (when-not (map? value)
-    (fail "Text width options must be a map" {:options value :allowed option-keys}))
+    (fail :limner.text/invalid-options "Text width options must be a map"
+          {:options value :allowed option-keys}))
   (when-let [unknown (seq (remove option-keys (keys value)))]
-    (fail "Text width options contain unsupported keys"
+    (fail :limner.text/invalid-options "Text width options contain unsupported keys"
           {:options value :unsupported (vec unknown) :allowed option-keys}))
   (let [ambiguous (get value :ambiguous-width 1)]
     (when-not (#{1 2} ambiguous)
-      (fail "Text width options require :ambiguous-width to be 1 or 2"
+      (fail :limner.text/invalid-options "Text width options require :ambiguous-width to be 1 or 2"
             {:options value :value ambiguous}))
     {:ambiguous-width ambiguous}))
 
@@ -98,10 +105,18 @@
     (or (printable-ascii-width input)
         (simple-wide-width input)
         (unicode-width/string-width (ansi/strip input) {:ambiguous-width 1}))
-    (let [{:keys [plain]} (source input)]
-      (unicode-width/string-width plain {:ambiguous-width 1}))))
+    (do
+      (when-not (vector? input)
+        (fail :limner.text/invalid-input
+              "Text width requires a string or styled-text vector"
+              {:input input}))
+      (let [{:keys [plain]} (source input)]
+        (unicode-width/string-width plain {:ambiguous-width 1})))))
 
 (defn width [input width-options]
+  (when-not (or (string? input) (vector? input))
+    (fail :limner.text/invalid-input
+          "Text width requires a string or styled-text vector" {:input input}))
   (let [width-options (options width-options)]
     (if (string? input)
       (or (printable-ascii-width input)
@@ -112,7 +127,7 @@
 
 (defn- validate-bounds [start end]
   (when-not (and (integer? start) (integer? end) (<= 0 start end))
-    (fail "Column slice requires non-negative ordered integer bounds"
+    (fail :limner.text/invalid-bounds "Column slice requires non-negative ordered integer bounds"
           {:start start :end end})))
 
 (defn- zero-anchor-in-slice? [column start end]
@@ -149,14 +164,16 @@
 
 (defn- target-width [target]
   (when-not (and (integer? target) (<= 0 target))
-    (fail "Target width must be a non-negative integer" {:target target})))
+    (fail :limner.text/invalid-target "Target width must be a non-negative integer"
+          {:target target})))
 
 (defn- fill-info [fill width-options]
   (let [fill (style/value fill), fill-units (units fill width-options)
         display-units (filter #(pos? (:width %)) fill-units)]
     (when-not (and (= 1 (count display-units))
                    (= (count fill-units) (count display-units)))
-      (fail "Padding fill must be exactly one positive-width grapheme cluster"
+      (fail :limner.text/invalid-fill
+            "Padding fill must be exactly one positive-width grapheme cluster"
             {:fill fill}))
     {:value fill :width (:width (first display-units))}))
 
@@ -267,6 +284,6 @@
 
 (defn wrap [input limit width-options]
   (when-not (and (integer? limit) (pos? limit))
-    (fail "Wrap width must be a positive integer" {:width limit}))
+    (fail :limner.text/invalid-width "Wrap width must be a positive integer" {:width limit}))
   (let [width-options (options width-options)]
     (vec (mapcat #(wrap-line % limit width-options) (lines input)))))

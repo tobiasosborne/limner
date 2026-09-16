@@ -11,13 +11,13 @@
     (is (= {:type :rgb :r 0 :g 0 :b 0}
            (core/rgb 0 0 0))))
 
-  (testing "Invalid RGB values throw assertion"
-    (is (thrown? AssertionError (core/rgb -1 0 0)))
-    (is (thrown? AssertionError (core/rgb 256 0 0)))
-    (is (thrown? AssertionError (core/rgb 0 -1 0)))
-    (is (thrown? AssertionError (core/rgb 0 256 0)))
-    (is (thrown? AssertionError (core/rgb 0 0 -1)))
-    (is (thrown? AssertionError (core/rgb 0 0 256)))))
+  (testing "Invalid RGB values throw ExceptionInfo with the ADR 0004 class"
+    (is (thrown? clojure.lang.ExceptionInfo (core/rgb -1 0 0)))
+    (is (thrown? clojure.lang.ExceptionInfo (core/rgb 256 0 0)))
+    (is (thrown? clojure.lang.ExceptionInfo (core/rgb 0 -1 0)))
+    (is (thrown? clojure.lang.ExceptionInfo (core/rgb 0 256 0)))
+    (is (thrown? clojure.lang.ExceptionInfo (core/rgb 0 0 -1)))
+    (is (thrown? clojure.lang.ExceptionInfo (core/rgb 0 0 256)))))
 
 (deftest test-256-color-validation
   (testing "Valid 256-color codes"
@@ -25,10 +25,10 @@
     (is (= {:type :256 :code 255} (core/color-256 255)))
     (is (= {:type :256 :code 196} (core/color-256 196))))
 
-  (testing "Invalid 256-color codes throw assertion"
-    (is (thrown? AssertionError (core/color-256 -1)))
-    (is (thrown? AssertionError (core/color-256 256)))
-    (is (thrown? AssertionError (core/color-256 1000)))))
+  (testing "Invalid 256-color codes throw ExceptionInfo with the ADR 0004 class"
+    (is (thrown? clojure.lang.ExceptionInfo (core/color-256 -1)))
+    (is (thrown? clojure.lang.ExceptionInfo (core/color-256 256)))
+    (is (thrown? clojure.lang.ExceptionInfo (core/color-256 1000)))))
 
 (deftest test-bg-color-functions
   (testing "Background RGB"
@@ -81,21 +81,17 @@
       (is (clojure.string/includes? result "Navy bg")))))
 
 (deftest test-invalid-color-handling
-  (testing "Invalid color keyword returns string uncolored"
-    (let [errors (java.io.StringWriter.)
-          result (binding [*err* errors]
-                   (core/color :nonexistent-color "Text"))]
-      (is (= "Text" result))
-      (is (= "Warning: Invalid color specification: :nonexistent-color\n"
-             (str errors)))))
+  (testing "An invalid color keyword throws instead of warning and returning text"
+    (let [errors (java.io.StringWriter.)]
+      (binding [*err* errors]
+        (is (thrown? clojure.lang.ExceptionInfo (core/color :nonexistent-color "Text"))))
+      (is (= "" (str errors)))))
 
-  (testing "Invalid color type returns string uncolored"
-    (let [errors (java.io.StringWriter.)
-          result (binding [*err* errors]
-                   (core/color "not-a-color" "Text"))]
-      (is (= "Text" result))
-      (is (= "Warning: Invalid color specification: not-a-color\n"
-             (str errors))))))
+  (testing "An invalid color type throws instead of warning and returning text"
+    (let [errors (java.io.StringWriter.)]
+      (binding [*err* errors]
+        (is (thrown? clojure.lang.ExceptionInfo (core/color "not-a-color" "Text"))))
+      (is (= "" (str errors))))))
 
 (deftest test-color-nesting
   (testing "an inner reset does not clear the outer style"

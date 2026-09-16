@@ -4,7 +4,11 @@
   Styled composition and Unicode columns delegate to `limner.text`, whose
   semantics are fixed by ADRs 0001 through 0003. The constructors here retain
   the legacy string-returning API; new layout code should keep styled values
-  as data until its output boundary."
+  as data until its output boundary.
+
+  Invalid arguments throw `ex-info` with an ADR 0004 class:
+  `:limner.core/invalid-rgb`, `:limner.core/invalid-color-index`,
+  `:limner.core/invalid-color`, or `:limner.core/invalid-string`."
   (:require [limner.ansi :as ansi]
             [limner.text :as text]))
 
@@ -74,13 +78,30 @@
   [n]
   (and (int? n) (>= n 0) (<= n 255)))
 
+(defn- ensure-rgb
+  "Validate an RGB triple for the colour constructors (ADR 0004)."
+  [r g b]
+  (when-not (valid-rgb? r g b)
+    (throw (ex-info "RGB components must be integers from 0 through 255"
+                    {:limner/error :limner.core/invalid-rgb
+                     :r r :g g :b b :valid-range [0 255]}))))
+
+(defn- ensure-256
+  "Validate a 256-colour palette index (ADR 0004)."
+  [n]
+  (when-not (valid-256? n)
+    (throw (ex-info "256-colour index must be an integer from 0 through 255"
+                    {:limner/error :limner.core/invalid-color-index
+                     :index n :valid-range [0 255]}))))
+
 (defn rgb
   "Create RGB/truecolor specification
    Usage: (rgb 255 128 0) => {:type :rgb :r 255 :g 128 :b 0}
 
-   RGB colors require terminal truecolor support (most modern terminals)"
+   RGB colors require terminal truecolor support (most modern terminals).
+   Components outside 0..255 throw `ex-info` with `:limner.core/invalid-rgb`."
   [r g b]
-  {:pre [(valid-rgb? r g b)]}
+  (ensure-rgb r g b)
   {:type :rgb :r r :g g :b b})
 
 (defn color-256
@@ -94,19 +115,19 @@
 
    See: https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit"
   [n]
-  {:pre [(valid-256? n)]}
+  (ensure-256 n)
   {:type :256 :code n})
 
 (defn bg-rgb
   "Create RGB background color specification"
   [r g b]
-  {:pre [(valid-rgb? r g b)]}
+  (ensure-rgb r g b)
   {:type :bg-rgb :r r :g g :b b})
 
 (defn bg-256
   "Create 256-color background specification"
   [n]
-  {:pre [(valid-256? n)]}
+  (ensure-256 n)
   {:type :bg-256 :code n})
 
 ;; ANSI code generation
@@ -160,18 +181,22 @@
    Nested calls compose through `limner.text`: an inner colour does not clear
    an outer attribute after the inner text.
 
-   Invalid specifications retain the legacy warning-and-unchanged behavior.
-   Nil input throws `ex-info`."
+   Invalid specifications throw `ex-info` with
+   `:limner.core/invalid-color`; a non-string text argument throws with
+   `:limner.core/invalid-string` (ADR 0004)."
   [color-spec s]
-  (when-not s
-    (throw (ex-info "Cannot color nil string" {:color-spec color-spec :string s})))
+  (when-not (string? s)
+    (throw (ex-info "Cannot color a non-string value"
+                    {:limner/error :limner.core/invalid-string
+                     :color-spec color-spec :string s})))
   (if-let [style-map (color-spec->style color-spec)]
     (text/to-ansi (text/style style-map s))
-    (do
-      (when (not= color-spec :reset)
-        (binding [*out* *err*]
-          (println "Warning: Invalid color specification:" color-spec)))
-      s)))
+    (if (= :reset color-spec)
+      s
+      (throw (ex-info "Invalid color specification"
+                      {:limner/error :limner.core/invalid-color
+                       :color-spec color-spec
+                       :action "Use a named colour keyword, (rgb r g b), (color-256 n), (bg-rgb r g b), or (bg-256 n)"})))))
 
 ;; Helper functions
 

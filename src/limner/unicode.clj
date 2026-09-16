@@ -12,7 +12,10 @@
   Zl, Zp, Cs, Co and Cn. Other assigned categories return `:other`; retaining
   categories that terminal width does not distinguish would enlarge startup
   data without changing a later width decision. Generated tables are never
-  edited directly: run `bb gen-unicode`, which also embeds source checksums."
+  edited directly: run `bb gen-unicode`, which also embeds source checksums.
+
+  An invalid code point throws `ex-info` with
+  `:limner.unicode/invalid-code-point` (ADR 0004)."
   (:require [limner.unicode.tables :as tables]))
 
 (def max-code-point 0x10FFFF)
@@ -25,7 +28,8 @@
 (defn- validate-code-point [code-point]
   (when-not (and (integer? code-point) (<= 0 code-point max-code-point))
     (throw (ex-info "Unicode code point must be an integer from 0 through 0x10FFFF"
-                    {:code-point code-point
+                    {:limner/error :limner.unicode/invalid-code-point
+                     :code-point code-point
                      :valid-range [0 max-code-point]})))
   code-point)
 

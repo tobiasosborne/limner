@@ -1,5 +1,11 @@
 (ns limner.render
-  "Efficient render loop with diff-based updates and double buffering"
+  "Experimental render loop with diff-based updates and double buffering.
+
+  Invalid buffer content throws `ex-info` with `:limner.render/invalid-string`,
+  `:limner.render/invalid-lines`, or `:limner.render/invalid-render-output`;
+  bad loop options throw `:limner.render/invalid-callback`. The render loop's
+  opt-in `:on-error` is the one documented error boundary: it reports the
+  error, keeps the last good frame, and never prints (ADR 0004)."
   (:require [clojure.java.shell]
             [clojure.string :as str]
             [limner.ansi :as ansi]
@@ -95,7 +101,8 @@
   [buffer x y s]
   (when-not (string? s)
     (throw (ex-info (str "Expected string but got " (type s) ": " (pr-str s))
-                    {:type (type s) :value s})))
+                    {:limner/error :limner.render/invalid-string
+                     :type (type s) :value s})))
   (let [cells (parse-line-with-ansi s)]
     (reduce
       (fn [buf [idx cell]]
@@ -111,7 +118,8 @@
     (fn [buf [line-idx line]]
       (when-not (string? line)
         (throw (ex-info (str "Line " line-idx " is not a string: " (type line) " = " (pr-str line))
-                        {:line-idx line-idx :type (type line) :value line})))
+                        {:limner/error :limner.render/invalid-lines
+                         :line-idx line-idx :type (type line) :value line})))
       (write-string-to-buffer buf x (+ y line-idx) line))
     buffer
     (map-indexed vector lines)))
@@ -191,62 +199,40 @@
 ;; ────────────────────── Error Handling & Validation ──────────────────────
 
 (defn- validate-render-output
-  "Validate that render function output is a collection of strings"
+  "Validate that render function output is a collection of strings.
+
+  Invalid output throws `ex-info` with
+  `:limner.render/invalid-render-output`; the render loop's boundary reports
+  it and keeps the last good frame (ADR 0004)."
   [output context]
   (cond
     (nil? output)
-    (do
-      (binding [*out* *err*]
-        (println (str "Warning: " context " returned nil, using empty output")))
-      [])
+    (throw (ex-info (str context " returned nil")
+                    {:limner/error :limner.render/invalid-render-output
+                     :context context :output output}))
 
     (not (sequential? output))
-    (do
-      (binding [*out* *err*]
-        (println (str "Warning: " context " returned non-sequential output: " (type output))))
-      [(str output)])
+    (throw (ex-info (str context " returned non-sequential output: " (type output))
+                    {:limner/error :limner.render/invalid-render-output
+                     :context context :output output :type (type output)}))
 
     :else
-    (try
-      (mapv (fn [line]
-              (if (string? line)
-                line
-                (do
-                  (binding [*out* *err*]
-                    (println (str "Warning: Non-string line in render output: " (type line))))
-                  (str line))))
-            output)
-      (catch Exception e
-        (binding [*out* *err*]
-          (println (str "Error validating render output: " (.getMessage e))))
-        ["[Render validation error]"]))))
+    (mapv (fn [line]
+            (if (string? line)
+              line
+              (throw (ex-info (str "Non-string line in render output: " (type line))
+                              {:limner/error :limner.render/invalid-render-output
+                               :context context :line line :type (type line)}))))
+          output)))
 
 (defn- safe-render-fn
-  "Safely call render function with error boundary"
-  [render-fn state context]
-  (try
-    (let [output (render-fn state)]
-      (validate-render-output output context))
-    (catch Exception e
-      (binding [*out* *err*]
-        (println (str "Error in " context ": " (.getMessage e))))
-      [(str "╔════════════════════════════════════════╗")
-       (str "║  RENDER ERROR                          ║")
-       (str "║                                        ║")
-       (str "║  " (subs (str (.getMessage e) "                                  ") 0 36) "  ║")
-       (str "║                                        ║")
-       (str "║  Check logs for details                ║")
-       (str "╚════════════════════════════════════════╝")])))
+  "Call render function and validate its output.
 
-(defn- safe-buffer-operation
-  "Safely perform buffer operation with error recovery"
-  [operation buffer fallback-fn context]
-  (try
-    (operation buffer)
-    (catch Exception e
-      (binding [*out* *err*]
-        (println (str "Error in buffer operation (" context "): " (.getMessage e))))
-      (fallback-fn buffer e))))
+  This is no longer an error boundary: errors reach the render loop, whose
+  opt-in `:on-error` callback reports them and keeps the last good frame.
+  Bead limner-2-3 owns the final loop shape."
+  [render-fn state context]
+  (validate-render-output (render-fn state) context))
 
 ;; ────────────────────── Terminal Operations ──────────────────────
 
@@ -309,23 +295,15 @@
 (defn setup-terminal
   "Setup terminal for rendering (hide cursor, clear screen)"
   []
-  (try
-    (core/hide-cursor)
-    (clear-screen)
-    (catch Exception e
-      (binding [*out* *err*]
-        (println (str "Error setting up terminal: " (.getMessage e)))))))
+  (core/hide-cursor)
+  (clear-screen))
 
 (defn restore-terminal
   "Restore terminal to normal state"
   []
-  (try
-    (core/show-cursor)
-    (print "\u001B[0m") ; Reset colors
-    (flush)
-    (catch Exception e
-      (binding [*out* *err*]
-        (println (str "Error restoring terminal: " (.getMessage e)))))))
+  (core/show-cursor)
+  (print "\u001B[0m") ; Reset colors
+  (flush))
 
 ;; ────────────────────── Render State ──────────────────────
 
@@ -367,17 +345,13 @@
     :back-buffer (:front-buffer state)))
 
 (defn update-back-buffer
-  "Update the back buffer with new content, with error recovery"
+  "Update the back buffer with new content.
+
+  Invalid content throws (ADR 0004); the render loop decides how to recover."
   [state content-lines]
-  (try
-    (let [clean-buffer (clear-buffer (:back-buffer state))
-          updated-buffer (write-lines-to-buffer clean-buffer 0 0 content-lines)]
-      (assoc state :back-buffer updated-buffer))
-    (catch Exception e
-      (binding [*out* *err*]
-        (println (str "Error updating back buffer: " (.getMessage e))))
-      ;; Return state with cleared buffer on error
-      (assoc state :back-buffer (clear-buffer (:back-buffer state))))))
+  (let [clean-buffer (clear-buffer (:back-buffer state))
+        updated-buffer (write-lines-to-buffer clean-buffer 0 0 content-lines)]
+    (assoc state :back-buffer updated-buffer)))
 
 ;; ────────────────────── Frame Rate Control ──────────────────────
 
@@ -411,48 +385,32 @@
   "Resize buffers to new dimensions, preserving what we can
    Returns updated state with resized buffers"
   [state new-width new-height]
-  (try
-    (let [old-width (:width state)
-          old-height (:height state)]
-      (if (and (= new-width old-width) (= new-height old-height))
-        ;; No change needed
-        state
-        ;; Resize needed
-        (do
-          (binding [*out* *err*]
-            (println (str "Terminal resized: " old-width "x" old-height
-                         " → " new-width "x" new-height)))
-          (assoc state
-            :width new-width
-            :height new-height
-            :front-buffer (create-buffer new-width new-height)
-            :back-buffer (create-buffer new-width new-height)
-            :last-resize-check (current-time-ns state)))))
-    (catch Exception e
-      (binding [*out* *err*]
-        (println (str "Error resizing buffers: " (.getMessage e))))
-      ;; Return original state on error
-      (assoc state :last-resize-check (current-time-ns state)))))
+  (let [old-width (:width state)
+        old-height (:height state)]
+    (if (and (= new-width old-width) (= new-height old-height))
+      ;; No change needed
+      state
+      ;; Resize needed
+      (assoc state
+             :width new-width
+             :height new-height
+             :front-buffer (create-buffer new-width new-height)
+             :back-buffer (create-buffer new-width new-height)
+             :last-resize-check (current-time-ns state)))))
 
 (defn- check-and-handle-resize
   "Check for terminal resize and handle it if detected
    Returns [state resized?] where resized? indicates if resize occurred"
   [state]
   (if (should-check-resize? state)
-    (try
-      (let [current-size (get-terminal-size)
-            new-width (:width current-size)
-            new-height (:height current-size)]
-        (if (or (not= new-width (:width state))
-                (not= new-height (:height state)))
-          ;; Resize detected
-          [(resize-buffers state new-width new-height) true]
-          ;; No resize, just update check time
-          [(assoc state :last-resize-check (current-time-ns state)) false]))
-      (catch Exception e
-        (binding [*out* *err*]
-          (println (str "Error checking terminal size: " (.getMessage e))))
-        ;; Return original state on error
+    (let [current-size (get-terminal-size)
+          new-width (:width current-size)
+          new-height (:height current-size)]
+      (if (or (not= new-width (:width state))
+              (not= new-height (:height state)))
+        ;; Resize detected
+        [(resize-buffers state new-width new-height) true]
+        ;; No resize, just update check time
         [(assoc state :last-resize-check (current-time-ns state)) false]))
     ;; Not time to check yet
     [state false]))
@@ -473,50 +431,35 @@
    content-lines: vector of strings to render
    Returns updated state
 
-   Error handling: Catches all exceptions and returns original state on error"
+   Invalid content throws (ADR 0004); the render loop reports the error and
+   keeps the last good frame."
   [state content-lines]
   (if (should-render? state)
-    (try
-      (let [updated-state (update-back-buffer state content-lines)
-            regions-count (apply-diff (:front-buffer updated-state)
-                                     (:back-buffer updated-state))
-            swapped-state (swap-buffers updated-state)]
-        (-> swapped-state
-            (update-render-time)
-            (update :frame-count inc)))
-      (catch Exception e
-        (binding [*out* *err*]
-          (println (str "Error rendering frame: " (.getMessage e))))
-        state))
+    (let [updated-state (update-back-buffer state content-lines)
+          _ (apply-diff (:front-buffer updated-state)
+                        (:back-buffer updated-state))
+          swapped-state (swap-buffers updated-state)]
+      (-> swapped-state
+          (update-render-time)
+          (update :frame-count inc)))
     state))
 
 (defn force-render
   "Force a full screen render, ignoring frame rate limits
    Useful for initial render or after terminal resize
 
-   Error handling: Catches exceptions and attempts partial render"
+   Invalid content throws (ADR 0004)."
   [state content-lines]
-  (try
-    (clear-screen)
-    (let [clean-front (assoc state :front-buffer
-                            (clear-buffer (:front-buffer state)))
-          updated-state (update-back-buffer clean-front content-lines)
-          _ (apply-diff (:front-buffer updated-state)
-                       (:back-buffer updated-state))
-          swapped-state (swap-buffers updated-state)]
-      (-> swapped-state
-          (update-render-time)
-          (update :frame-count inc)))
-    (catch Exception e
-      (binding [*out* *err*]
-        (println (str "Error in force-render: " (.getMessage e))))
-      ;; Attempt to at least clear screen on error
-      (try
-        (clear-screen)
-        (catch Exception _
-          (binding [*out* *err*]
-            (println "Error: Could not clear screen"))))
-      state)))
+  (clear-screen)
+  (let [clean-front (assoc state :front-buffer
+                           (clear-buffer (:front-buffer state)))
+        updated-state (update-back-buffer clean-front content-lines)
+        _ (apply-diff (:front-buffer updated-state)
+                      (:back-buffer updated-state))
+        swapped-state (swap-buffers updated-state)]
+    (-> swapped-state
+        (update-render-time)
+        (update :frame-count inc))))
 
 ;; ────────────────────── Render Loop ──────────────────────
 
@@ -528,6 +471,19 @@
         sleep-time (- target-frame-time elapsed)]
     (max 1 (long sleep-time))))
 
+(defn- report-render-error!
+  "Render-loop error boundary (ADR 0004): record the error, call the opt-in
+  :on-error callback, and never print. TODO(limner-2-3): bead 2.3 finalises the
+  single allowed library error boundary."
+  [error-atom on-error error]
+  (reset! error-atom error)
+  (when on-error
+    (try
+      (on-error error)
+      (catch Exception callback-error
+        ;; TODO(limner-2-3): a broken callback must not kill the loop; record it.
+        (reset! error-atom callback-error)))))
+
 (defn create-render-loop
   "Create a render loop that renders content from a state atom
 
@@ -535,24 +491,26 @@
    - :fps - target frames per second (default 60)
    - :render-fn - function that takes app-state and returns vector of lines
    - :on-frame - optional callback called each frame with render-state
-   - :on-error - optional error handler (fn [exception] ...)
+   - :on-error - opt-in error boundary (fn [exception] ...); the loop keeps its
+     last good frame and does not print (ADR 0004)
 
    Returns a map with control functions:
    - :stop! - function to stop the render loop (blocks until stopped)
    - :force-render! - function to force immediate render
    - :get-stats - function to get render statistics
-   - :running? - function to check if loop is still running
-
-   Thread Safety:
-   - Uses future for managed concurrency
-   - Proper shutdown coordination via promise
-   - Error handling with optional callback
-   - Graceful cleanup on shutdown"
+   - :running? - function to check if loop is still running"
   [app-state-atom & {:keys [fps render-fn on-frame on-error]
                      :or {fps 60}}]
-  {:pre [(fn? render-fn)
-         (or (nil? on-frame) (fn? on-frame))
-         (or (nil? on-error) (fn? on-error))]}
+  (when-not (fn? render-fn)
+    (throw (ex-info "create-render-loop requires a :render-fn function"
+                    {:limner/error :limner.render/invalid-callback
+                     :render-fn render-fn})))
+  (when-not (or (nil? on-frame) (fn? on-frame))
+    (throw (ex-info "create-render-loop :on-frame must be a function"
+                    {:limner/error :limner.render/invalid-callback :on-frame on-frame})))
+  (when-not (or (nil? on-error) (fn? on-error))
+    (throw (ex-info "create-render-loop :on-error must be a function"
+                    {:limner/error :limner.render/invalid-callback :on-error on-error})))
 
   (let [term-size (get-terminal-size)
         render-state (atom (render-state (:width term-size) (:height term-size)))
@@ -566,9 +524,12 @@
           (try
             (setup-terminal)
 
-            ;; Initial render with error boundary
-            (let [content (safe-render-fn render-fn @app-state-atom "render-fn (initial)")]
-              (swap! render-state force-render content))
+            ;; Initial render, through the opt-in boundary
+            (try
+              (let [content (safe-render-fn render-fn @app-state-atom "render-fn (initial)")]
+                (swap! render-state force-render content))
+              (catch Exception e
+                (report-render-error! error-atom on-error e)))
 
             ;; Main loop
             (loop [last-frame-time (System/currentTimeMillis)]
@@ -583,31 +544,15 @@
                       (let [content (safe-render-fn render-fn @app-state-atom "render-fn (after resize)")]
                         (swap! render-state force-render content))))
 
-                  ;; Render frame with error boundary
+                  ;; Render frame, then the optional frame callback
                   (let [content (safe-render-fn render-fn @app-state-atom "render-fn")]
                     (swap! render-state render-frame content)
-
-                    ;; Optional frame callback
                     (when on-frame
-                      (try
-                        (on-frame @render-state)
-                        (catch Exception callback-error
-                          ;; Don't let frame callback crash the loop
-                          (binding [*out* *err*]
-                            (println "Error in on-frame callback:" callback-error))))))
+                      (on-frame @render-state)))
 
-                  ;; Handle render loop errors
+                  ;; The opt-in boundary: report, keep the last good frame
                   (catch Exception e
-                    (reset! error-atom e)
-                    (binding [*out* *err*]
-                      (println "Fatal error in render loop:" (.getMessage e)))
-                    (when on-error
-                      (try
-                        (on-error e)
-                        (catch Exception callback-error
-                          ;; Don't let error handler crash the loop
-                          (binding [*out* *err*]
-                            (println "Error in on-error callback:" callback-error)))))))
+                    (report-render-error! error-atom on-error e)))
 
                 ;; Sleep to maintain target FPS
                 (let [sleep-time (calculate-sleep-time fps last-frame-time)]
@@ -627,8 +572,7 @@
               ;; Wait for clean shutdown with timeout
               (let [result (deref shutdown-promise 2000 :timeout)]
                 (when (= result :timeout)
-                  (binding [*out* *err*]
-                    (println "Warning: Render loop did not stop within 2 seconds"))
+                  ;; TODO(limner-2-3): record the stop timeout in loop stats.
                   ;; Force cancellation as last resort
                   (future-cancel render-future))
                 ;; Re-throw any errors that occurred
@@ -636,8 +580,11 @@
                   (throw error))))
 
      :force-render! (fn []
-                      (let [content (safe-render-fn render-fn @app-state-atom "render-fn (force)")]
-                        (swap! render-state force-render content)))
+                      (try
+                        (let [content (safe-render-fn render-fn @app-state-atom "render-fn (force)")]
+                          (swap! render-state force-render content))
+                        (catch Exception e
+                          (report-render-error! error-atom on-error e))))
 
      :get-stats (fn []
                   {:frame-count (:frame-count @render-state)

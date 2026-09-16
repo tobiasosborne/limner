@@ -12,7 +12,13 @@
   it intentionally does not segment. Both functions take an options map so
   ambiguous-width policy stays pure and injectable. See
   `docs/adr/0001-terminal-width-semantics.md` and the pinned sources under
-  `reference/specs/` and `reference/unicode/17.0.0/`."
+  `reference/specs/` and `reference/unicode/17.0.0/`.
+
+  Invalid input throws `ex-info` with an ADR 0004 class:
+  `:limner.unicode.width/invalid-code-point`,
+  `:limner.unicode.width/invalid-options`,
+  `:limner.unicode.width/invalid-cluster`, or
+  `:limner.unicode.width/invalid-string`."
   (:require [limner.unicode :as unicode]
             [limner.unicode.width.string :as string-width]))
 
@@ -24,26 +30,31 @@
 (defn- ambiguous-width [options]
   (when-not (map? options)
     (throw (ex-info "Width options must be a map"
-                    {:options options :allowed valid-option-keys})))
+                    {:limner/error :limner.unicode.width/invalid-options
+                     :options options :allowed valid-option-keys})))
   (let [unknown (seq (remove valid-option-keys (keys options)))
         value (get options :ambiguous-width 1)]
     (when unknown
       (throw (ex-info "Width options contain unsupported keys"
-                      {:options options :unsupported (vec unknown)
+                      {:limner/error :limner.unicode.width/invalid-options
+                       :options options :unsupported (vec unknown)
                        :allowed valid-option-keys})))
     (when-not (#{1 2} value)
       (throw (ex-info "Width options require :ambiguous-width to be 1 or 2"
-                      {:options options :value value :allowed [1 2]})))
+                      {:limner/error :limner.unicode.width/invalid-options
+                       :options options :value value :allowed [1 2]})))
     value))
 
 (defn- packed-code-point [code-point]
   (when-not (and (integer? code-point) (<= 0 code-point 0x10FFFF))
     (throw (ex-info "Width requires a Unicode code point from 0 through 0x10FFFF"
-                    {:code-point code-point :valid-range [0 0x10FFFF]})))
+                    {:limner/error :limner.unicode.width/invalid-code-point
+                     :code-point code-point :valid-range [0 0x10FFFF]})))
   (let [packed (unicode/packed-properties code-point)]
     (when (= 8 (bit-and 15 (bit-shift-right packed category-shift)))
     (throw (ex-info "Width is undefined for a UTF-16 surrogate code point"
-                    {:code-point code-point
+                    {:limner/error :limner.unicode.width/invalid-code-point
+                     :code-point code-point
                      :action "Pass a Unicode scalar value, not a UTF-16 code unit"})))
     packed))
 
@@ -113,7 +124,8 @@
   [cluster options]
   (when-not (and (string? cluster) (seq cluster))
     (throw (ex-info "Cluster width requires a non-empty string"
-                    {:cluster cluster :action "Pass exactly one grapheme cluster"})))
+                    {:limner/error :limner.unicode.width/invalid-cluster
+                     :cluster cluster :action "Pass exactly one grapheme cluster"})))
   (let [ambiguous (ambiguous-width options)
         points (code-points cluster)
         widths (mapv #(code-point-width* % ambiguous) points)
@@ -137,5 +149,6 @@
   `limner.unicode.width.string`; this function owns public option validation."
   [text options]
   (when-not (string? text)
-    (throw (ex-info "String width requires a string" {:text text})))
+    (throw (ex-info "String width requires a string"
+                    {:limner/error :limner.unicode.width/invalid-string :text text})))
   (string-width/width text (ambiguous-width options)))

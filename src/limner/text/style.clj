@@ -5,7 +5,11 @@
   while unsupported controls remain opaque spans. Rendering derives every SGR
   parameter from that map, so no stored reset string can clobber an enclosing
   style. Public callers use `limner.text`; this namespace exposes the small
-  internal seam used by column operations."
+  internal seam used by column operations.
+
+  Invalid input throws `ex-info` with an ADR 0004 class:
+  `:limner.text.style/invalid-color`, `:limner.text.style/invalid-style`,
+  `:limner.text.style/invalid-span`, or `:limner.text.style/invalid-input`."
   (:refer-clojure :exclude [concat])
   (:require [clojure.string :as str]
             [limner.ansi :as ansi]))
@@ -20,8 +24,8 @@
   #{:fg :bg :bold :dim :italic :underline :blink :inverse :hidden :strike :link})
 (def ^:private boolean-keys #{:bold :dim :italic :inverse :hidden :strike})
 
-(defn- fail [message data]
-  (throw (ex-info message data)))
+(defn- fail [error-class message data]
+  (throw (ex-info message (assoc data :limner/error error-class))))
 
 (defn- byte? [value]
   (and (integer? value) (<= 0 value 255)))
@@ -32,15 +36,17 @@
     (and (map? value) (= #{:index} (set (keys value))) (byte? (:index value))) value
     (and (map? value) (= #{:rgb} (set (keys value)))
          (vector? (:rgb value)) (= 3 (count (:rgb value))) (every? byte? (:rgb value))) value
-    :else (fail "Styled text has an invalid color value"
+    :else (fail :limner.text.style/invalid-color
+                "Styled text has an invalid color value"
                 {:style-key key :value value
                  :action "Use a named color, {:index 0..255}, or {:rgb [r g b]}"})))
 
 (defn normalize-style [style]
   (when-not (map? style)
-    (fail "Styled text requires a style map" {:style style}))
+    (fail :limner.text.style/invalid-style "Styled text requires a style map" {:style style}))
   (when-let [unknown (seq (remove style-keys (keys style)))]
-    (fail "Styled text contains unsupported style keys"
+    (fail :limner.text.style/invalid-style
+          "Styled text contains unsupported style keys"
           {:style style :unsupported (vec unknown) :allowed (sort style-keys)}))
   (reduce-kv
    (fn [result key value]
@@ -49,23 +55,27 @@
        (boolean-keys key)
        (cond (= true value) (assoc result key true)
              (= false value) result
-             :else (fail "Styled text boolean style must be true, false, or absent"
+             :else (fail :limner.text.style/invalid-style
+                         "Styled text boolean style must be true, false, or absent"
                          {:style-key key :value value}))
        (#{:fg :bg} key) (assoc result key (normalize-color key value))
        (= :underline key)
        (case value true (assoc result key :single)
          false result, :single (assoc result key value), :double (assoc result key value)
-         (fail "Styled text underline must be :single or :double"
+         (fail :limner.text.style/invalid-style
+               "Styled text underline must be :single or :double"
                {:style-key key :value value}))
        (= :blink key)
        (case value true (assoc result key :slow)
          false result, :slow (assoc result key value)
-         (fail "Styled text blink must be :slow"
+         (fail :limner.text.style/invalid-style
+               "Styled text blink must be :slow"
                {:style-key key :value value}))
        (= :link key)
        (if (and (string? value) (seq value))
          (assoc result key value)
-         (fail "Styled text link must be a non-empty URI string"
+         (fail :limner.text.style/invalid-style
+               "Styled text link must be a non-empty URI string"
                {:style-key key :value value}))))
    {}
    style))
@@ -75,7 +85,8 @@
     (contains? span :text)
     (let [value (:text span), style (normalize-style (:style span))]
       (when-not (string? value)
-        (fail "Styled text span requires string :text" {:span span}))
+        (fail :limner.text.style/invalid-span
+              "Styled text span requires string :text" {:span span}))
       (if (empty? value)
         spans
         (let [span {:text value :style style}, previous (peek spans)]
@@ -86,14 +97,17 @@
     (contains? span :raw)
     (let [value (:raw span)]
       (when-not (string? value)
-        (fail "Opaque styled-text span requires string :raw" {:span span}))
+        (fail :limner.text.style/invalid-span
+              "Opaque styled-text span requires string :raw" {:span span}))
       (if (empty? value) spans (conj spans {:raw value})))
 
-    :else (fail "Styled text span requires :text or :raw" {:span span})))
+    :else (fail :limner.text.style/invalid-span
+                "Styled text span requires :text or :raw" {:span span})))
 
 (defn canonical [spans]
   (when-not (vector? spans)
-    (fail "Styled text must be a vector of spans" {:value spans}))
+    (fail :limner.text.style/invalid-input
+          "Styled text must be a vector of spans" {:value spans}))
   (reduce append-span [] spans))
 
 (defn- ansi-color [value]
@@ -124,7 +138,8 @@
 
 (defn from-ansi [input]
   (when-not (string? input)
-    (fail "ANSI styled-text parsing requires a string" {:text input}))
+    (fail :limner.text.style/invalid-input
+          "ANSI styled-text parsing requires a string" {:text input}))
   (loop [tokens (seq (ansi/tokenize input)), style {}, spans []]
     (if-let [token (first tokens)]
       (cond
@@ -152,7 +167,9 @@
 (defn value [input]
   (cond (string? input) (from-ansi input)
         (vector? input) (canonical input)
-        :else (fail "Text operation requires a string or styled-text vector" {:value input})))
+        :else (fail :limner.text.style/invalid-input
+                    "Text operation requires a string or styled-text vector"
+                    {:value input})))
 
 (defn concat [& values]
   (reduce (fn [result input] (reduce append-span result (value input))) [] values))
@@ -167,7 +184,7 @@
 
 (defn styled [input style-map]
   (when-not (string? input)
-    (fail "styled requires a string" {:text input}))
+    (fail :limner.text.style/invalid-input "styled requires a string" {:text input}))
   (style style-map (from-ansi input)))
 
 (def ^:private color-indices (zipmap named-colors (range)))

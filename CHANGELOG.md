@@ -7,6 +7,53 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+ADR 0004 replaces swallowed errors and fabricated fallbacks with `ex-info`.
+The following functions changed their error behaviour:
+
+- `limner.core/rgb` and `bg-rgb` throw `:limner.core/invalid-rgb` instead of
+  `AssertionError` for components outside 0..255.
+- `limner.core/color-256` and `bg-256` throw
+  `:limner.core/invalid-color-index` instead of `AssertionError`.
+- `limner.core/color` throws `:limner.core/invalid-color` for an unknown
+  specification and `:limner.core/invalid-string` for non-string text;
+  previously it printed a warning and returned the input unchanged.
+- `limner.borders/get-border-chars` throws
+  `:limner.borders/unknown-border-style` for an unknown keyword instead of
+  silently using `:single`.
+- `limner.borders/draw-titled-box` throws
+  `:limner.borders/invalid-title-pos` instead of defaulting to `:left`.
+- `limner.borders/draw-box`, `draw-titled-box`, `add-shadow`,
+  `add-heavy-shadow`, `side-by-side`, and `colorize-border` no longer catch
+  and return a placeholder box, the input, or `[]`.
+- `limner.borders/indent-lines`, `nest-box`, and `side-by-side` throw
+  `:limner.borders/invalid-dimension` instead of `AssertionError`.
+- `limner.layout/fixed`, `percent`, and `flex` throw
+  `:limner.layout/invalid-dimension` or `:limner.layout/invalid-constraint`
+  instead of `AssertionError`; `percent` rejects values outside 0..100 rather
+  than clamping them.
+- `limner.layout/resolve-constraint` throws instead of returning 0;
+  `resolve-flex-constraints` throws on negative remaining space.
+- `limner.layout/layout-stack`, `layout-hsplit`, `layout-grid`, `layout`,
+  `clip`, and `pad-to-box` throw instead of returning `[]`.
+- `limner.layout/layout` throws `:limner.layout/unknown-layout-type` for an
+  unknown `:type` instead of returning `[]`.
+- `limner.render/write-string-to-buffer` and `write-lines-to-buffer` now carry
+  `:limner/error` in their `ex-info` data.
+- `limner.render/update-back-buffer`, `render-frame`, and `force-render` throw
+  on invalid content instead of clearing the buffer or returning the old
+  state; the render loop's opt-in `:on-error` keeps the last good frame.
+- `limner.render/setup-terminal` and `restore-terminal` no longer swallow
+  errors; the render loop no longer prints errors, resize messages, or stop
+  warnings, and records them in its stats and `:on-error` callback instead.
+- `limner.events/dispatch-key` propagates a handler exception instead of
+  logging it and returning the old state; the async event processor routes
+  handler errors and timeouts to its `:on-error`/`:on-timeout` callbacks and
+  stats without printing.
+- `limner.text` and `limner.unicode.*` invalid-input exceptions now carry a
+  `:limner/error` class in their data map (the classes are listed in ADR 0004).
+
 ### Added
 
 - Pinned the Unicode Character Database at 17.0.0, with the Emoji 17.0 test
