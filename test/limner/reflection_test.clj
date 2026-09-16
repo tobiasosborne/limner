@@ -1,10 +1,11 @@
 (ns limner.reflection-test
-  "Guards the JVM compiler's known reflection warnings while migration proceeds.
+  "Guards the JVM compiler's zero-reflection-warning target.
 
   Every source namespace is reloaded with reflection diagnostics enabled and
-  stderr captured.  The checked-in set must shrink exactly: a new diagnostic is
-  a regression, while a removed diagnostic requires deleting its baseline entry.
-  Babashka has no equivalent JVM compiler diagnostic and reports that explicitly."
+  stderr captured. The checked-in baseline is deliberately empty: a new
+  diagnostic fails the gate rather than being recorded, and a non-empty
+  baseline is itself a failure. Babashka has no equivalent JVM compiler
+  diagnostic and reports that explicitly."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -88,8 +89,11 @@
           actual (reflection-warnings)
           new (sort (unmatched-actual actual expected))
           stale (sort (missing-baseline-entries actual expected))]
+      (is (empty? expected)
+          (str "The reflection baseline must stay empty (PLAN 2.6); fix the "
+               "warning instead of recording it. Entries: " (pr-str expected)))
       (is (empty? new)
-          (str "New JVM reflection warnings:\n" (str/join "\n" new)))
+          (str "JVM reflection warnings must be fixed, not baselined:\n" (str/join "\n" new)))
       (is (empty? stale)
-          (str "Fixed reflection warnings remain in the shrinking baseline; remove:\n"
+          (str "Fixed reflection warnings remain in the baseline; remove:\n"
                (str/join "\n" stale))))))

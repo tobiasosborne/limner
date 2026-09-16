@@ -627,7 +627,7 @@
 
                 ;; Sleep to maintain target FPS
                 (let [sleep-time (calculate-sleep-time fps last-frame-time)]
-                  (Thread/sleep sleep-time))
+                  (Thread/sleep (long sleep-time)))
 
                 ;; Continue loop
                 (recur (System/currentTimeMillis))))

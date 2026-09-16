@@ -102,10 +102,10 @@
 
 (defn parse-inline-code
   "Parse inline code: `code`"
-  [text]
+  [^String text]
   (let [pattern #"`([^`]+)`"]
     (if-let [match (re-find pattern text)]
-      (let [[full code] match
+      (let [[^String full code] match
             before (subs text 0 (.indexOf text full))
             after (subs text (+ (.indexOf text full) (count full)))]
         (concat
@@ -121,10 +121,10 @@
    (fn [node]
      (if (not= :text (:type node))
        [node]
-       (let [text (:content node)
+       (let [^String text (:content node)
              pattern #"\*\*([^\*]+)\*\*|__([^_]+)__"]
          (if-let [match (re-find pattern text)]
-           (let [[full group1 group2] match
+           (let [[^String full group1 group2] match
                  bold-content (or group1 group2)
                  before (subs text 0 (.indexOf text full))
                  after (subs text (+ (.indexOf text full) (count full)))]
@@ -142,10 +142,10 @@
    (fn [node]
      (if (not= :text (:type node))
        [node]
-       (let [text (:content node)
+       (let [^String text (:content node)
              pattern #"(?<!\*)\*([^\*]+)\*(?!\*)|(?<!_)_([^_]+)_(?!_)"]
          (if-let [match (re-find pattern text)]
-           (let [[full group1 group2] match
+           (let [[^String full group1 group2] match
                  italic-content (or group1 group2)
                  before (subs text 0 (.indexOf text full))
                  after (subs text (+ (.indexOf text full) (count full)))]
@@ -163,10 +163,10 @@
    (fn [node]
      (if (not= :text (:type node))
        [node]
-       (let [text (:content node)
+       (let [^String text (:content node)
              pattern #"\[([^\]]+)\]\(([^\)]+)\)"]
          (if-let [match (re-find pattern text)]
-           (let [[full link-text url] match
+           (let [[^String full link-text url] match
                  before (subs text 0 (.indexOf text full))
                  after (subs text (+ (.indexOf text full) (count full)))]
              (concat

@@ -186,7 +186,7 @@
 
       ;; Regular character
       (= 1 (count input))
-      (let [c (first input)]
+      (let [^Character c (first input)]
         {:type :key
          :key (if (Character/isUpperCase c)
                 (keyword (str "shift-" (str/lower-case c)))
@@ -279,7 +279,7 @@
   [{:keys [components focused wrap] :as state}]
   (if (empty? components)
     state
-    (let [current-idx (or (.indexOf components focused) -1)
+    (let [current-idx (or (.indexOf ^java.util.List components focused) -1)
           next-idx (inc current-idx)]
       (cond
         (>= next-idx (count components))
@@ -295,7 +295,7 @@
   [{:keys [components focused wrap] :as state}]
   (if (empty? components)
     state
-    (let [current-idx (or (.indexOf components focused) (count components))
+    (let [current-idx (or (.indexOf ^java.util.List components focused) (count components))
           prev-idx (dec current-idx)]
       (cond
         (< prev-idx 0)

@@ -195,7 +195,7 @@
   "Format current timestamp"
   ([]
    (format-timestamp (java.time.LocalTime/now)))
-  ([time]
+  ([^java.time.LocalTime time]
    (let [hour (.getHour time)
          minute (.getMinute time)
          second (.getSecond time)]

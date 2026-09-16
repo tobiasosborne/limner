@@ -104,6 +104,10 @@ The following functions changed their error behaviour:
 
 ### Fixed
 
+- Removed every JVM reflection warning from `src/` with explicit type hints
+  (`limner.components.markdown`, `limner.components.statusbar`,
+  `limner.events`, `limner.render`). The reflection gate now fails on any
+  warning and its baseline is an intentionally empty file (PLAN 2.6).
 - Kept invisible and structural all-zero grapheme clusters at zero terminal
   width while retaining the explicit isolated-combining-mark fallback.
 - Made non-SGR CSI sequences, OSC 8 hyperlinks, and other ECMA-48 controls
