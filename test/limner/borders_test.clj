@@ -5,6 +5,7 @@
             [clojure.test.check.properties :as prop]
             [limner.borders :as borders]
             [limner.component-support :as component]
+            [limner.core :as core]
             [limner.text :as text]))
 
 ;; ────────────────────── Border Style Tests ──────────────────────
@@ -202,21 +203,57 @@
   (testing "Rounded border rows are coloured end to end, content is not"
     (component/assert-lines
      ["\u001B[31m╭────╮\u001B[0m"
-      "\u001B[31m│\u001B[0m hi \u001B[31m│\u001B[0m"
+      "\u001B[31m│\u001B[39m hi \u001B[31m│\u001B[0m"
       "\u001B[31m╰────╯\u001B[0m"]
      (borders/colorize-border (borders/draw-box ["hi"] :border-style :rounded) :red)))
   (testing "Thick border rows are coloured end to end"
     (component/assert-lines
      ["\u001B[31m┏━━━━┓\u001B[0m"
-      "\u001B[31m┃\u001B[0m hi \u001B[31m┃\u001B[0m"
+      "\u001B[31m┃\u001B[39m hi \u001B[31m┃\u001B[0m"
       "\u001B[31m┗━━━━┛\u001B[0m"]
      (borders/colorize-border (borders/draw-box ["hi"] :border-style :thick) :red)))
   (testing "A title inside the top border is not coloured"
     (component/assert-lines
-     ["\u001B[31m┌\u001B[0m Hi \u001B[31m┐\u001B[0m"
-      "\u001B[31m│\u001B[0m x  \u001B[31m│\u001B[0m"
+     ["\u001B[31m┌\u001B[39m Hi \u001B[31m┐\u001B[0m"
+      "\u001B[31m│\u001B[39m x  \u001B[31m│\u001B[0m"
       "\u001B[31m└────┘\u001B[0m"]
      (borders/colorize-border (borders/draw-titled-box "Hi" ["x"]) :red))))
+
+(deftest colorize-border-preserves-existing-styles-and-controls
+  (testing "A border-like title glyph keeps its own colour inside a coloured border"
+    (component/assert-lines
+     ["\u001B[31m┌\u001B[39m \u001B[34m─\u001B[39m \u001B[31m┐\u001B[0m"
+      "\u001B[31m│\u001B[39m \u001B[32mx\u001B[39m \u001B[31m│\u001B[0m"
+      "\u001B[31m└───┘\u001B[0m"]
+     (borders/colorize-border
+      (borders/draw-titled-box (core/color :blue "─")
+                               [(core/color :green "x")])
+      :red)))
+  (testing "An OSC 8 link in content survives border colouring exactly"
+    (let [link "\u001B]8;;https://x\u001B\\x\u001B]8;;\u001B\\"]
+      (component/assert-lines
+       ["\u001B[31m┌───┐\u001B[0m"
+        "\u001B[31m│\u001B[39m \u001B]8;;https://x\u001B\\x\u001B]8;;\u001B\\ \u001B[31m│\u001B[0m"
+        "\u001B[31m└───┘\u001B[0m"]
+       (borders/colorize-border (borders/draw-box [link]) :red)))))
+
+(deftest custom-border-and-shadow-glyphs-obey-column-geometry
+  (testing "Custom border strings must each be one display-column grapheme"
+    (doseq [style [["界" "界" "界" "界" "界" "界"]
+                   ["" "x" "x" "x" "x" "x"]]]
+      (is (= :limner.borders/invalid-border-style
+             (:limner/error
+              (try (borders/draw-box ["x"] :border-style style)
+                   nil
+                   (catch clojure.lang.ExceptionInfo e (ex-data e))))))))
+  (testing "A wide shadow fill is sliced by columns, not repeated by occurrence"
+    (let [box (borders/draw-box ["x"])]
+      (component/assert-lines
+       ["┌───┐" "│ x │ " "└───┘ " "  界界 "]
+       (borders/add-shadow box :shadow-char "界"))
+      (component/assert-lines
+       ["┌───┐" "│ x │界" "└───┘界" "  界界 " "  界界 "]
+       (borders/add-heavy-shadow box :shadow-char "界")))))
 
 (deftest every-drawn-line-has-one-width
   (testing "draw-box: generated content keeps one exact display width"

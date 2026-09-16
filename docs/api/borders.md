@@ -32,7 +32,8 @@ Creates a custom border style specification.
 **Parameters:**
 - `spec`: A six-string vector in the order `[top-left top-right bottom-left
   bottom-right horizontal vertical]`, or a map containing those six named
-  string values. Incomplete or non-string custom styles throw `ex-info` with
+  string values. Each value must occupy exactly one display column. Incomplete,
+  empty, or geometrically wider custom styles throw `ex-info` with
   `:limner.borders/invalid-border-style`.
 
 ## Drawing Functions
@@ -112,7 +113,10 @@ Indents a collection of lines by `n` spaces.
 ### `add-shadow`
 `(add-shadow box-lines & options)`
 
-Adds a drop shadow to the right and bottom edges of a box.
+Adds a drop shadow to the right and bottom edges of a box. Shadow fills use
+`limner.text`'s one-grapheme fill rule, so a wide glyph is sliced to the exact
+shadow columns; an empty or multi-grapheme fill throws
+`:limner.text/invalid-fill`.
 
 **Options:**
 - `:shadow-char`: Character to use for shadow (default "░").
@@ -133,8 +137,10 @@ Adds a heavier, thicker drop shadow (2 characters wide/high).
 
 Colours only the border segments while leaving content and titles untouched.
 The first and last rows are border rows, and every glyph in them that belongs
-to a known border style is coloured; interior rows colour only their first
-and last glyph. Pass `:border-style` for a custom glyph set.
+to the structural runs at either edge is coloured; interior rows colour only
+their first and last glyph. Existing title/content colours, attributes, and
+OSC 8 links are preserved, and a border-like glyph inside a title is not
+reclassified as structure. Pass `:border-style` for a custom glyph set.
 
 **Options:**
 - `:border-style`: Border style or custom specification (default: every

@@ -25,6 +25,10 @@ The following functions changed their error behaviour:
   `:limner.borders/invalid-border-style`.
 - `limner.borders/draw-titled-box` throws
   `:limner.borders/invalid-title-pos` instead of defaulting to `:left`.
+- Custom border-style strings must now each occupy exactly one display column;
+  empty or wider strings throw `:limner.borders/invalid-border-style`. Shadow
+  fills must be one positive-width grapheme and otherwise throw
+  `:limner.text/invalid-fill`.
 - `limner.components.progress/spinner` throws
   `:limner.components.progress/invalid-spinner-style` for unknown styles or
   missing, empty, or non-string custom frames instead of creating nil frames.
@@ -128,9 +132,13 @@ The following functions changed their error behaviour:
   rectangular (REVIEW F7, B3).
 - Made `limner.borders/colorize-border` colour border segments from their
   position and known glyph set, so rounded and thick boxes are coloured end to
-  end while a title stays untouched (REVIEW F7).
+  end while a title stays untouched. Existing title/content styles and OSC 8
+  links survive, including when a title contains a border-like glyph (REVIEW
+  F7).
 - Expanded content tabs in `limner.borders` to eight-column tab stops before
   layout instead of measuring them as zero-width controls.
+- Made border shadows fill terminal columns through `limner.text`, so a wide
+  shadow glyph cannot change the documented one- or two-column geometry.
 - Distributed flex remainder by largest fractional share in
   `limner.layout/resolve-flex-constraints`, so a stack or split allocates every
   row or column and no final row is dropped (REVIEW F6).

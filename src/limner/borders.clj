@@ -5,7 +5,8 @@
   UTF-16 units, so a CJK or emoji title fits the same geometry as ASCII and a
   title that already carries ANSI keeps its style. Border segments are
   coloured from their position in the box and their known glyph set, not by
-  sniffing one corner character.
+  sniffing one corner character. Recolouring preserves existing content and
+  title spans, including OSC 8 links.
 
   Tabs in content are terminal cursor motion, not glyphs. Measuring a tab as
   zero columns would make the box disagree with the terminal, so content tabs
@@ -28,17 +29,20 @@
 (def ^:private custom-style-keys
   [:top-left :top-right :bottom-left :bottom-right :horizontal :vertical])
 
+(defn- valid-border-glyph? [glyph]
+  (and (string? glyph) (= 1 (text/width glyph))))
+
 (defn- valid-custom-style? [style]
   (cond
-    (vector? style) (and (= 6 (count style)) (every? string? style))
-    (map? style) (every? #(string? (get style %)) custom-style-keys)
+    (vector? style) (and (= 6 (count style)) (every? valid-border-glyph? style))
+    (map? style) (every? #(valid-border-glyph? (get style %)) custom-style-keys)
     :else false))
 
 (defn- invalid-border-style! [style]
-  (throw (ex-info "Border style must be a known keyword or six-string vector/map"
+  (throw (ex-info "Border style must be a known keyword or six one-column strings"
                   {:limner/error :limner.borders/invalid-border-style
                    :style style :type (type style)
-                   :limner/hint (str "Use a predefined keyword or supply strings for "
+                   :limner/hint (str "Use a predefined keyword or supply one-column strings for "
                                      (pr-str custom-style-keys))})))
 
 (defn- validate-border-style [style]
@@ -72,8 +76,9 @@
   "Create a custom border style.
 
   `spec` is a six-string vector `[top-left top-right bottom-left bottom-right
-  horizontal vertical]` or a map with those named keys. An incomplete or
-  non-string spec throws `:limner.borders/invalid-border-style`."
+  horizontal vertical]` or a map with those named keys. Every string must
+  occupy exactly one display column. An incomplete or geometrically invalid
+  spec throws `:limner.borders/invalid-border-style`."
   [spec]
   (validate-custom-style spec)
   (if (vector? spec)
@@ -208,34 +213,45 @@
 
 ;; ────────────────────── Coloured borders ──────────────────────
 
-(defn- split-border-runs
-  "Split `line` into runs of `{:border? :text}` from the known glyph set."
-  [line glyph-set]
-  (reduce (fn [runs {:keys [cluster]}]
-            (let [border? (contains? glyph-set cluster)
-                  previous (peek runs)]
-              (if (and previous (= border? (:border? previous)))
-                (conj (pop runs) (update previous :text str cluster))
-                (conj runs {:border? border? :text cluster}))))
-          [] (text/clusters line)))
+(defn- unit-value [{:keys [cluster style raw]}]
+  (text/concat (if (seq raw) [{:raw raw}] [])
+               (if (empty? cluster) [] [{:text cluster :style style}])))
 
-(defn- colorize-top-line [line color glyph-set]
-  (->> (split-border-runs line glyph-set)
-       (map (fn [{:keys [border? text]}]
-              (if border? (core/color color text) text)))
-       (apply str)))
+(defn- color-unit [unit color]
+  (text/from-ansi (core/color color (text/to-ansi (unit-value unit)))))
 
-(defn- colorize-content-line [line color]
+(defn- edge-flags
+  "Mark the uninterrupted border-glyph run at the start of `units`."
+  [units glyph-set]
+  (loop [remaining (seq units), at-edge? true, result []]
+    (if-let [unit (first remaining)]
+      (let [border? (and at-edge? (contains? glyph-set (:cluster unit)))]
+        (recur (next remaining) border? (conj result border?)))
+      result)))
+
+(defn- border-row-flags
+  "Mark structural runs from both edges, leaving a title between spaces alone."
+  [units glyph-set]
+  (let [left (edge-flags units glyph-set)
+        right (reverse (edge-flags (reverse units) glyph-set))]
+    (mapv #(or %1 %2) left right)))
+
+(defn- content-row-flags
+  "Mark only the first and last grapheme units of an interior row."
+  [units]
+  (loop [remaining (seq units), first? true, result []]
+    (if (nil? remaining)
+      result
+      (recur (next remaining) false
+             (conj result (or first? (nil? (next remaining))))))))
+
+(defn- colorize-line [line flags color]
   (let [units (text/clusters line)]
-    (cond
-      (empty? units) line
-      (empty? (rest units)) (core/color color line)
-      :else (let [first-cluster (:cluster (first units))
-                  last-cluster (:cluster (last units))
-                  middle (apply str (map :cluster (butlast (rest units))))]
-              (str (core/color color first-cluster)
-                   middle
-                   (core/color color last-cluster))))))
+    (text/to-ansi
+     (apply text/concat
+            (map (fn [unit border?]
+                   (if border? (color-unit unit color) (unit-value unit)))
+                 units flags)))))
 
 (defn colorize-border
   "Colour only the border segments of `box-lines`, leaving content unchanged.
@@ -243,9 +259,10 @@
   `box-lines` is a box returned by `draw-box` or `draw-titled-box`. The first
   and last rows are border rows: every glyph that belongs to a known border
   style is coloured, so rounded and thick rows are coloured end to end while a
-  title stays uncoloured. Interior rows colour only their first and last
-  glyph. Pass `:border-style` for a custom glyph set; the default recognises
-  every predefined style's glyphs.
+  title stays uncoloured even when it contains a border-like glyph. Interior
+  rows colour only their first and last glyph. Existing title/content styles
+  and OSC 8 links survive. Pass `:border-style` for a custom glyph set; the
+  default recognises every predefined style's glyphs.
 
   Non-string lines throw `:limner.borders/invalid-lines`; an invalid colour
   throws the `limner.core` classes."
@@ -257,9 +274,11 @@
         last-idx (dec (count box-lines))]
     (vec (map-indexed
           (fn [idx line]
-            (if (or (zero? idx) (= idx last-idx))
-              (colorize-top-line line color glyph-set)
-              (colorize-content-line line color)))
+            (let [units (text/clusters line)
+                  flags (if (or (zero? idx) (= idx last-idx))
+                          (border-row-flags units glyph-set)
+                          (content-row-flags units))]
+              (colorize-line line flags color)))
           box-lines))))
 
 ;; ────────────────────── Effects and composition ──────────────────────

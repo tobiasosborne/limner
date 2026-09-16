@@ -8,6 +8,11 @@
             [limner.core :as core]
             [limner.text :as text]))
 
+(defn- fill-columns
+  "Fill exactly `columns` with one styled grapheme, slicing wide fills safely."
+  [fill columns]
+  (text/to-ansi (text/pad-right "" columns fill)))
+
 (defn add-shadow
   "Add a one-column drop shadow to the right and bottom edges.
 
@@ -21,13 +26,14 @@
                       (core/color shadow-color shadow-char)
                       shadow-char)
           box-width (text/width (first box-lines))
+          right-shadow (fill-columns shadow-ch 1)
           with-right-shadow (map-indexed
                              (fn [idx line]
                                (if (zero? idx)
                                  line
-                                 (str line shadow-ch)))
+                                 (str line right-shadow)))
                              box-lines)
-          bottom-shadow (str "  " (apply str (repeat box-width shadow-ch)))]
+          bottom-shadow (str "  " (fill-columns shadow-ch box-width))]
       (concat with-right-shadow [bottom-shadow]))))
 
 (defn add-heavy-shadow
@@ -42,14 +48,15 @@
                       (core/color shadow-color shadow-char)
                       shadow-char)
           box-width (text/width (first box-lines))
+          right-shadow (fill-columns shadow-ch 2)
           with-right-shadow (map-indexed
                              (fn [idx line]
                                (if (zero? idx)
                                  line
-                                 (str line shadow-ch shadow-ch)))
+                                 (str line right-shadow)))
                              box-lines)
-          bottom-shadow-1 (str "  " (apply str (repeat box-width shadow-ch)))
-          bottom-shadow-2 (str "  " (apply str (repeat box-width shadow-ch)))]
+          bottom-shadow-1 (str "  " (fill-columns shadow-ch box-width))
+          bottom-shadow-2 (str "  " (fill-columns shadow-ch box-width))]
       (concat with-right-shadow [bottom-shadow-1 bottom-shadow-2]))))
 
 (defn indent-lines

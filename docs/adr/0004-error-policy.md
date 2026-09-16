@@ -114,7 +114,7 @@ caller believes an option is in effect that is not, so those throw.
 | `:limner.text/invalid-options` | `limner.text` width operations | options are not a map, contain an unsupported key, or set `:ambiguous-width` to something other than 1 or 2 |
 | `:limner.text/invalid-bounds` | `limner.text/slice-columns` | bounds are not ordered non-negative integers |
 | `:limner.text/invalid-target` | `limner.text` pad/truncate | target is not a non-negative integer |
-| `:limner.text/invalid-fill` | `limner.text` pad/centre | fill is not exactly one positive-width grapheme |
+| `:limner.text/invalid-fill` | `limner.text` pad/centre; `limner.borders` shadows | fill is not exactly one positive-width grapheme |
 | `:limner.text/invalid-width` | `limner.text/wrap` | limit is not a positive integer |
 | `:limner.text.style/invalid-color` | `limner.text.style/normalize-style` | a `:fg`/`:bg` value is not a supported colour |
 | `:limner.text.style/invalid-style` | `limner.text.style/normalize-style` | style is not a map, has an unsupported key, or has the wrong value type |
@@ -129,7 +129,7 @@ caller believes an option is in effect that is not, so those throw.
 | `:limner.unicode.width/invalid-string` | `limner.unicode.width/string-width` | input is not a string |
 | `:limner.unicode.width.string/surrogate` | `limner.unicode.width.string` | input contains an unpaired surrogate |
 | `:limner.borders/invalid-lines` | `limner.borders/validate-lines` | input is not a collection, or holds a non-string |
-| `:limner.borders/invalid-border-style` | `limner.borders/custom-style`, `get-border-chars` | style is neither a keyword nor a complete six-string vector/map |
+| `:limner.borders/invalid-border-style` | `limner.borders/custom-style`, `get-border-chars` | style is neither a keyword nor a complete six-one-column-string vector/map |
 | `:limner.borders/unknown-border-style` | `limner.borders/get-border-chars` | keyword style is not in `border-styles` |
 | `:limner.borders/invalid-title` | `limner.borders/draw-titled-box` | title is not a string |
 | `:limner.borders/invalid-title-pos` | `limner.borders/draw-titled-box` | position is not `:left`, `:center`, or `:right` |
