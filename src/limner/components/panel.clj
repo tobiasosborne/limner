@@ -7,8 +7,8 @@
   already carries ANSI keep their true columns and styles. The title is cut to
   the inner width before it is drawn, so it cannot widen the border.
 
-  `:width` must leave room for the border and at least one content column;
-  anything smaller throws `:limner.components.panel/invalid-width` (ADR 0004).
+  `:width` must leave room for the border; anything below four columns throws
+  `:limner.components.panel/invalid-width` (ADR 0004).
   Omitting `:width` auto-sizes the panel to its widest content line."
   (:require [clojure.string :as str]
             [limner.borders :as borders]

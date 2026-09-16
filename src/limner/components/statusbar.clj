@@ -10,7 +10,8 @@
 
   There is no private background-colour table or ANSI stripper; the colour
   vocabulary is `limner.text.style`. An unsupported `:bg-color` or `:fg-color`
-  throws the `limner.text.style/invalid-color` class (ADR 0004)."
+  throws the `limner.text.style/invalid-color` class, and an invalid width
+  throws `:limner.components.statusbar/invalid-width` (ADR 0004)."
   (:require [limner.text :as text]))
 
 ;; ────────────────────── Statusbar Component ──────────────────────
@@ -73,6 +74,10 @@
   `:fg-color` fill only the keys a section span does not already set, so a
   caller's foreground and attributes survive composition."
   [{:keys [left center right width] :as statusbar}]
+  (when-not (and (integer? width) (<= 0 width))
+    (throw (ex-info "Statusbar width must be a non-negative integer"
+                    {:limner/error :limner.components.statusbar/invalid-width
+                     :width width :type (type width)})))
   (let [left-value (or left "")
         center-value (or center "")
         right-value (or right "")

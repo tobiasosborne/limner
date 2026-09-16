@@ -220,6 +220,9 @@ Creates a status bar.
 - `:bg-color`: Background color keyword (default `:bright-black`).
 - `:fg-color`: Text color keyword (default `:white`).
 
+`:width` must be a non-negative integer; invalid values throw
+`:limner.components.statusbar/invalid-width`.
+
 ### `render`
 `(render statusbar-state)`
 

@@ -139,6 +139,18 @@
                                                     :right right :width width))))))]
       (is (:pass? result) (pr-str result)))))
 
+(deftest statusbar-width-validation
+  (testing "zero columns render as the exact empty line"
+    (component/assert-lines [""]
+                            [(statusbar/render (statusbar/statusbar :width 0))]))
+  (testing "invalid widths throw the statusbar error class"
+    (doseq [width [-1 1.5 "20"]]
+      (is (= :limner.components.statusbar/invalid-width
+             (:limner/error
+              (try (statusbar/render (statusbar/statusbar :width width))
+                   nil
+                   (catch clojure.lang.ExceptionInfo e (ex-data e)))))))))
+
 (deftest non-sgr-controls-do-not-enter-statusbar-layout
   (testing "An OSC 8 hyperlink occupies no layout columns but survives"
     (is (= "\u001B]8;;https://x\u001B\\link\u001B]8;;\u001B\\    "

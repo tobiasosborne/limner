@@ -94,6 +94,8 @@ The following functions changed their error behaviour:
   rendering the wrong geometry or failing in arithmetic.
 - List and status-bar truncation now use the single-character ellipsis `…`
   from `limner.text` instead of three ASCII dots.
+- `limner.components.statusbar/render` rejects widths that are not
+  non-negative integers with `:limner.components.statusbar/invalid-width`.
 - Deprecated `limner/table` retains its newline-terminated string return and
   right alignment, but ragged rows now throw `:limner.table/ragged-rows` and
   `:header? false` no longer duplicates the first row.

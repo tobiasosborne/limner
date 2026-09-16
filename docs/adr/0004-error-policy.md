@@ -144,6 +144,7 @@ caller believes an option is in effect that is not, so those throw.
 | `:limner.table/invalid-padding` | `limner.table/table` | `:padding` is not a non-negative integer |
 | `:limner.components.list/invalid-width` | `limner.components.list/render-list` | content columns cannot fit the item prefix or filter prompt |
 | `:limner.components.input/invalid-width` | `limner.components.input/render` | width is not a non-negative integer, or a bordered input is narrower than four columns |
+| `:limner.components.statusbar/invalid-width` | `limner.components.statusbar/render` | width is not a non-negative integer |
 | `:limner.components.panel/invalid-width` | `limner.components.panel/render` | `:width` is not an integer or leaves no room for the border |
 | `:limner.layout/invalid-constraint` | `limner.layout/validate-constraint` | constraint is not a map, or its `:type` is unknown |
 | `:limner.layout/invalid-dimension` | `limner.layout` | a dimension is not a non-negative integer |
