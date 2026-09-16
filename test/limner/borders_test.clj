@@ -1,7 +1,11 @@
 (ns limner.borders-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.properties :as prop]
             [limner.borders :as borders]
-            [clojure.string :as str]))
+            [limner.component-support :as component]
+            [limner.text :as text]))
 
 ;; ────────────────────── Border Style Tests ──────────────────────
 (deftest test-predefined-styles
@@ -158,6 +162,80 @@
     (let [lines [(apply str (repeat 100 "x"))]
           box (borders/draw-box lines)]
       (is (> (count (first box)) 100)))))
+
+;; ────────────────────── Column-correct goldens ──────────────────────
+(deftest draw-box-cjk-golden
+  (testing "CJK content keeps every line the same display width"
+    (component/assert-lines
+     ["┌────────┐"
+      "│ 日本語 │"
+      "└────────┘"]
+     (borders/draw-box ["日本語"]))))
+
+(deftest draw-titled-box-cjk-golden
+  (testing "A CJK title sizes the box by columns, not UTF-16 units"
+    (component/assert-lines
+     ["┌ 日本語 ┐"
+      "│ x      │"
+      "└────────┘"
+      ]
+     (borders/draw-titled-box "日本語" ["x"]))))
+
+(deftest draw-titled-box-styled-golden
+  (testing "A pre-coloured title keeps its style and the box stays square"
+    (component/assert-lines
+     ["┌ \u001B[31mTitle\u001B[39m ┐"
+      "│ x     │"
+      "└───────┘"]
+     (borders/draw-titled-box (str "\u001B[31mTitle\u001B[0m") ["x"]))))
+
+(deftest tabs-expand-to-eight-column-stops
+  (testing "A tab is cursor motion, so it expands before the box is measured"
+    (component/assert-lines
+     ["┌───────────┐"
+      "│ a       b │"
+      "│ abcd      │"
+      "└───────────┘"]
+     (borders/draw-box ["a\tb" "abcd"]))))
+
+(deftest colorize-border-is-structural
+  (testing "Rounded border rows are coloured end to end, content is not"
+    (component/assert-lines
+     ["\u001B[31m╭────╮\u001B[0m"
+      "\u001B[31m│\u001B[0m hi \u001B[31m│\u001B[0m"
+      "\u001B[31m╰────╯\u001B[0m"]
+     (borders/colorize-border (borders/draw-box ["hi"] :border-style :rounded) :red)))
+  (testing "Thick border rows are coloured end to end"
+    (component/assert-lines
+     ["\u001B[31m┏━━━━┓\u001B[0m"
+      "\u001B[31m┃\u001B[0m hi \u001B[31m┃\u001B[0m"
+      "\u001B[31m┗━━━━┛\u001B[0m"]
+     (borders/colorize-border (borders/draw-box ["hi"] :border-style :thick) :red)))
+  (testing "A title inside the top border is not coloured"
+    (component/assert-lines
+     ["\u001B[31m┌\u001B[0m Hi \u001B[31m┐\u001B[0m"
+      "\u001B[31m│\u001B[0m x  \u001B[31m│\u001B[0m"
+      "\u001B[31m└────┘\u001B[0m"]
+     (borders/colorize-border (borders/draw-titled-box "Hi" ["x"]) :red))))
+
+(deftest every-drawn-line-has-one-width
+  (testing "draw-box: generated content keeps one exact display width"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [lines component/lines-gen]
+                    (let [rendered (borders/draw-box lines)
+                          expected (+ 4 (apply max 0 (map text/width lines)))]
+                      (and (= (+ 2 (count lines)) (count rendered))
+                           (every? #(= expected (text/width %)) rendered)))))]
+      (is (:pass? result) (pr-str result))))
+  (testing "draw-titled-box: title and content share one width"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [title component/title-gen
+                                 lines component/lines-gen]
+                    (component/equal-line-width?
+                     (borders/draw-titled-box title lines))))]
+      (is (:pass? result) (pr-str result)))))
 
 ;; Run all tests
 (defn run-tests []

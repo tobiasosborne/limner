@@ -115,3 +115,68 @@
       (is (contains? allowed-catches [path name])
           (str path " / " name " catches Exception/Throwable; add it to "
                "allowed-catches with a reason or let the error propagate (ADR 0004).")))))
+
+;; ────────────────────── Component text-operation gate ──────────────────────
+
+(def ^:private component-sources
+  "Standalone text-rendering namespaces; extended as components migrate."
+  #{"src/limner/borders.clj"
+    "src/limner/borders/internal.clj"
+    "src/limner/borders/effects.clj"})
+
+(def ^:private banned-text-symbols
+  "Symbols whose UTF-16 semantics must not appear in a component namespace."
+  #{"subs" "nth" "count"})
+
+(def ^:private banned-interop-methods
+  "Java string methods that split or count UTF-16 code units."
+  #{".substring" ".length" ".codePointCount"})
+
+(def ^:private allowed-component-uses
+  "Component uses of a banned symbol that are not about user-visible text,
+  each with the reason it is safe."
+  {["src/limner/borders.clj" 'limner.borders/valid-custom-style? 'count]
+   "Counts the six elements of a custom-style vector, not text."
+
+   ["src/limner/borders.clj" 'limner.borders/colorize-border 'count]
+   "Counts box rows to find the last one; never measures text."
+
+   ["src/limner/borders/effects.clj" 'limner.borders.effects/side-by-side 'count]
+   "Counts box rows to pad the shorter column; never measures text."})
+
+(defn- banned-use [form]
+  (cond
+    (and (seq? form) (symbol? (first form)))
+    (let [head (first form), name (clojure.core/name head)]
+      (cond
+        (contains? banned-text-symbols name) name
+        (contains? banned-interop-methods name) name
+        (and (= "format" name)
+             (string? (second form))
+             (re-find #"%[-+ 0-9.#]*[sS]" (second form)))
+        "format"
+        :else nil))
+    (instance? java.util.regex.Pattern form)
+    (when (re-find #"\\u001[bB]|\\u001B|\\x1[bB]|\\033|\\e\[" (str form))
+      "ansi-regex")
+    :else nil))
+
+(defn- component-entries []
+  (for [file (source-files)
+        :let [path (relative-path file)]
+        :when (contains? component-sources path)
+        :let [forms (support/read-forms (slurp file))
+              ns-sym (second (first forms))]
+        form forms
+        :let [name (declared-name ns-sym form)]
+        :when name]
+    {:path path :form form :name name}))
+
+(deftest components-use-the-text-layer
+  (testing "no component measures or slices user-visible text with UTF-16 tools"
+    (doseq [{:keys [path form name]} (component-entries)
+            :let [use (some banned-use (walk form))]
+            :when use]
+      (is (contains? allowed-component-uses [path name (symbol use)])
+          (str path " / " name " uses " use "; route it through limner.text or "
+               "add it to allowed-component-uses with a reason.")))))

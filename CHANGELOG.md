@@ -113,6 +113,14 @@ The following functions changed their error behaviour:
 
 ### Fixed
 
+- Made `limner.borders` measure content and titles in display columns through
+  `limner.text`, so CJK, emoji ZWJ, and pre-coloured titles keep the box
+  rectangular (REVIEW F7, B3).
+- Made `limner.borders/colorize-border` colour border segments from their
+  position and known glyph set, so rounded and thick boxes are coloured end to
+  end while a title stays untouched (REVIEW F7).
+- Expanded content tabs in `limner.borders` to eight-column tab stops before
+  layout instead of measuring them as zero-width controls.
 - Made `limner.render/buffer-stats` count a wide grapheme once rather than
   counting its continuation as a second non-empty cell.
 - Removed every JVM reflection warning from `src/` with explicit type hints

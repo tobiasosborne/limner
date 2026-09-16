@@ -76,10 +76,11 @@ Unknown border keywords and `:title-pos` values throw their ADR 0004
 `:limner/error` classes; they do not select a default or return a placeholder.
 Non-string content and titles likewise throw instead of fabricating a box.
 
-Content width now uses the Unicode 17 `limner.text/width` path through
-`limner.core/visible-width`, but title positioning still uses string length.
-Titles containing ANSI sequences or wide Unicode characters can therefore
-misalign until the component migration phase.
+Content and title width both go through the Unicode 17 `limner.text/width`
+path, so CJK, emoji, and pre-coloured titles keep the box rectangular. Tabs
+in content are cursor motion rather than zero-width glyphs: each tab expands
+to spaces up to the next multiple of eight columns before the box is laid
+out.
 
 ## Composition
 
@@ -128,11 +129,16 @@ Adds a drop shadow to the right and bottom edges of a box.
 Adds a heavier, thicker drop shadow (2 characters wide/high).
 
 ### `colorize-border`
-`(colorize-border box-lines color)`
+`(colorize-border box-lines color & options)`
 
-Attempts to color the border characters while leaving the content uncolored.
-The current border-line detection is incomplete: top and bottom lines in
-styles such as `:rounded` and `:thick` are not fully colored.
+Colours only the border segments while leaving content and titles untouched.
+The first and last rows are border rows, and every glyph in them that belongs
+to a known border style is coloured; interior rows colour only their first
+and last glyph. Pass `:border-style` for a custom glyph set.
+
+**Options:**
+- `:border-style`: Border style or custom specification (default: every
+  predefined style's glyphs).
 
 **Parameters:**
 - `box-lines`: The rendered box (a collection of strings).
