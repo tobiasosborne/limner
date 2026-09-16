@@ -263,7 +263,7 @@ to make one.
   and `bb benchmark:text`; `bb bench-check` runs the short JVM and babashka
   timing budgets serially and is intentionally outside `bb check`.
 - **Reflection:** loading every namespace with `*warn-on-reflection*` on
-  printed 18 warnings on 2026-09-15. Do not add new ones.
+  prints zero warnings. Keep the gate at zero.
 - **Evidence scripts** for audit claims live under `reviews/<date>/evidence/`.
   Re-run them rather than quoting their numbers.
 - **Machine limits:** this is WSL and has frozen from runaway processes.
