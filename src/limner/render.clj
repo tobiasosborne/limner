@@ -747,7 +747,8 @@
   {:width (:width buffer)
    :height (:height buffer)
    :total-cells (* (:width buffer) (:height buffer))
-   :non-empty-cells (count (filter #(not= " " (:cluster %))
+   :non-empty-cells (count (filter #(and (not (continuation? %))
+                                         (not= " " (:cluster %)))
                                    (apply concat (:cells buffer))))})
 
 (defn render-stats

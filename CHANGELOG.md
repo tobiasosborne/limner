@@ -113,6 +113,8 @@ The following functions changed their error behaviour:
 
 ### Fixed
 
+- Made `limner.render/buffer-stats` count a wide grapheme once rather than
+  counting its continuation as a second non-empty cell.
 - Removed every JVM reflection warning from `src/` with explicit type hints
   (`limner.components.markdown`, `limner.components.statusbar`,
   `limner.events`, `limner.render`). The reflection gate now fails on any

@@ -198,7 +198,12 @@
     (is (= 4 (:width stats)))
     (is (= 1 (:height stats)))
     (is (= 4 (:total-cells stats)))
-    (is (= 2 (:non-empty-cells stats)))))
+    (is (= 2 (:non-empty-cells stats))))
+  (testing "a wide continuation is not a second non-empty cell"
+    (let [stats (render/buffer-stats
+                 (render/write-string-to-buffer (render/create-buffer 3 1)
+                                                0 0 "😀"))]
+      (is (= 1 (:non-empty-cells stats))))))
 
 ;; ──────────────────────── Golden tests through the virtual terminal ──────────────────────
 
