@@ -6,6 +6,7 @@
             [limner.ansi.sgr :as sgr]
             [limner.borders :as borders]
             [limner.components.list :as list]
+            [limner.components.panel :as panel]
             [limner.core :as core]
             [limner.events :as events]
             [limner.layout :as layout]
@@ -234,6 +235,10 @@
          (thrown-class #(list/render (list/list-component
                                       :items ["x"] :width 10
                                       :border false :show-filter true))))))
+
+(deftest panel-rejects-unusable-widths
+  (is (= :limner.components.panel/invalid-width
+         (thrown-class #(panel/render (panel/panel :content ["x"] :width 3))))))
 
 ;; ────────────────────── no printing ──────────────────────
 

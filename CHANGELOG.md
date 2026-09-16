@@ -165,6 +165,11 @@ The following functions changed their error behaviour:
   and ANSI stripper, measures CJK and emoji in columns, and keeps OSC 8
   hyperlinks in the output without counting their controls (REVIEW F9/B2/B3).
   Truncation now uses the text layer's `…` ellipsis.
+- Made `limner.components.panel` render every line at exactly the configured
+  `:width` and measure, truncate, and pad content and titles through
+  `limner.text`, so CJK, emoji, and ANSI content keep their columns and styles
+  and a title cannot widen the border. A width below 4 throws
+  `:limner.components.panel/invalid-width` (REVIEW B3).
 - Made `limner.render/buffer-stats` count a wide grapheme once rather than
   counting its continuation as a second non-empty cell.
 - Removed every JVM reflection warning from `src/` with explicit type hints

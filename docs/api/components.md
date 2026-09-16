@@ -6,7 +6,12 @@ This page summarizes the component namespaces. There is no aggregate
 ## Panel
 `limner.components.panel`
 
-A state map and renderer for bordered content.
+A state map and renderer for bordered content. When `:width` is set, every
+rendered line is exactly `:width` display columns wide, including the border.
+Content and the title are measured, truncated, and padded in terminal columns
+through `limner.text`, so CJK and emoji content and content that already
+carries ANSI keep their true widths and styles. Omitting `:width` auto-sizes
+the panel to its widest line.
 
 ### `panel`
 `(panel & options)`
@@ -20,8 +25,9 @@ Creates a panel component.
 - `:border-style`: Border style keyword (default `:single`).
 - `:padding`: Inner padding (default 0).
 - `:height`: Maximum number of rendered content lines.
-- `:width`: Stored in the state and used by collapsed rendering; expanded
-  rendering does not currently enforce it.
+- `:width`: Total rendered width including the border; every line is exactly
+  this wide. A width below 4 throws
+  `:limner.components.panel/invalid-width`.
 - `:scrollable`: Enable scrolling (default `false`).
 
 ### `render`

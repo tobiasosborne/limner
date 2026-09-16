@@ -128,7 +128,8 @@
     "src/limner/components/list.clj"
     "src/limner/components/input.clj"
     "src/limner/components/progress.clj"
-    "src/limner/components/statusbar.clj"})
+    "src/limner/components/statusbar.clj"
+    "src/limner/components/panel.clj"})
 
 (def ^:private banned-text-symbols
   "Symbols whose UTF-16 semantics must not appear in a component namespace."
@@ -175,7 +176,10 @@
    "Progress counts frames and labels; rendered text is built by limner.text."
 
    ["src/limner/components/progress.clj" 'nth]
-   "Progress indexes its own frame and label vectors, never text columns."})
+   "Progress indexes its own frame and label vectors, never text columns."
+
+   ["src/limner/components/panel.clj" 'count]
+   "Panel counts content lines and children; line text is measured by limner.text."})
 
 (defn- banned-use [form]
   (cond

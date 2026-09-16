@@ -1,7 +1,13 @@
 (ns limner.components.panel-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
+            [limner.component-support :as component]
             [limner.components.panel :as panel]
-            [clojure.string :as str]))
+            [limner.core :as core]
+            [limner.text :as text]))
 
 ;; ────────────────────── Panel Creation Tests ──────────────────────
 (deftest test-panel-creation
@@ -220,6 +226,41 @@
           updated (panel/set-content p "New content")]
       (is (= "New content" (:content updated)))
       (is (= "Test" (:title updated))))))
+
+;; ────────────────────── Column-correct goldens ──────────────────────
+(deftest panel-cjk-styled-emoji-golden
+  (testing "Content, title, and styles render at exactly the configured width"
+    (component/assert-lines
+     ["┌ 日本 ────────────┐"
+      "│ 日本語           │"
+      "│ \u001B[31mR\u001B[39m                │"
+      "│ 👩‍🔬               │"
+      "└──────────────────┘"]
+     (panel/render (panel/panel :title "日本"
+                                :content ["日本語" (core/color :red "R") "👩‍🔬"]
+                                :width 20 :padding 0)))))
+
+(deftest panel-rejects-unusable-width
+  (is (= :limner.components.panel/invalid-width
+         (:limner/error
+          (try (panel/render (panel/panel :content ["x"] :width 3))
+               nil
+               (catch clojure.lang.ExceptionInfo e (ex-data e)))))))
+
+(deftest panel-width-property
+  (testing "Every rendered panel line has the configured width"
+    (let [result (tc/quick-check
+                  100
+                  (prop/for-all [title component/title-gen
+                                 lines component/lines-gen
+                                 width (gen/choose 5 40)
+                                 padding (gen/choose 0 2)]
+                    (let [rendered (panel/render
+                                    (panel/panel :title title :content lines
+                                                 :width width :padding padding))]
+                      (and (seq rendered)
+                           (every? #(= width (text/width %)) rendered)))))]
+      (is (:pass? result) (pr-str result)))))
 
 ;; Run all tests
 (defn run-tests []
