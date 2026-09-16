@@ -17,11 +17,12 @@ The following functions changed their error behaviour:
 - `limner.core/color-256` and `bg-256` throw
   `:limner.core/invalid-color-index` instead of `AssertionError`.
 - `limner.core/color` throws `:limner.core/invalid-color` for an unknown
-  specification and `:limner.core/invalid-string` for non-string text;
+  or malformed specification and `:limner.core/invalid-string` for non-string text;
   previously it printed a warning and returned the input unchanged.
 - `limner.borders/get-border-chars` throws
   `:limner.borders/unknown-border-style` for an unknown keyword instead of
-  silently using `:single`.
+  silently using `:single`; incomplete custom vectors/maps throw
+  `:limner.borders/invalid-border-style`.
 - `limner.borders/draw-titled-box` throws
   `:limner.borders/invalid-title-pos` instead of defaulting to `:left`.
 - `limner.borders/draw-box`, `draw-titled-box`, `add-shadow`,
@@ -43,7 +44,8 @@ The following functions changed their error behaviour:
   `:limner/error` in their `ex-info` data.
 - `limner.render/update-back-buffer`, `render-frame`, and `force-render` throw
   on invalid content instead of clearing the buffer or returning the old
-  state; the render loop's opt-in `:on-error` keeps the last good frame.
+  state. Validation happens before a frame-rate skip or terminal clear; the
+  render loop's opt-in `:on-error` keeps the last good frame.
 - `limner.render/setup-terminal` and `restore-terminal` no longer swallow
   errors; the render loop no longer prints errors, resize messages, or stop
   warnings, and records them in its stats and `:on-error` callback instead.

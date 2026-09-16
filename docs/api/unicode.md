@@ -17,7 +17,8 @@ on the host JDK's Unicode version.
 - `(general-category cp)`
 
 Each accepts an integer from 0 through U+10FFFF and throws `ex-info` outside
-that domain. Property names are keywords matching their UCD spelling, such as
+that domain, with `:limner.unicode/invalid-code-point` in its data. Property
+names are keywords matching their UCD spelling, such as
 `:W`, `:ZWJ`, and `:Regional_Indicator`. General Category retains the values
 needed by terminal-width rules—`:Mn`, `:Me`, `:Mc`, `:Cf`, `:Cc`, `:Zl`,
 `:Zp`, `:Cs`, `:Co`, and `:Cn`—and returns `:other` for other assigned
@@ -59,6 +60,9 @@ not perform segmentation. A cluster made only from zero-width code points has
 width 1 only when it begins with a non-default-ignorable `Mn` or `Me` mark;
 invisible and structural singleton clusters have width 0. Whole-string width
 is available as `limner.text/width`.
+
+Width and segmentation validation failures carry the namespaced ADR 0004
+`:limner/error` class rather than an assertion or an unclassified exception.
 
 ## Extended grapheme clusters
 

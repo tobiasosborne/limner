@@ -17,6 +17,8 @@ exact source in `:raw`, so this invariant always holds:
 (= input (apply str (map :raw (ansi/tokenize input)))) ; => true
 ```
 
+Non-string input throws `ex-info` with `:limner.ansi/invalid-input`.
+
 The token shapes are:
 
 - text: `{:type :text :text "..." :raw "..."}`
@@ -44,6 +46,8 @@ dropped from `tokenize`: its `:raw` value preserves it for lossless callers.
 
 `sgr-params` accepts a CSI token whose final byte is `m` and returns ordered
 maps with `:attribute`, `:value`, and the exact parameter substring in `:raw`.
+Other token shapes throw `ex-info` with
+`:limner.ansi.sgr/invalid-token`.
 Resets are explicit: parameter 0 is `{:attribute :all :value :default}`, 22
 sets intensity to `:normal`, 23 clears italic, 24 clears underline, 25 clears
 blink, 27 clears inverse, 28 clears hidden, 29 clears crossed-out, and 39/49

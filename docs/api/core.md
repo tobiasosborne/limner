@@ -40,7 +40,9 @@ Applies a color to a string. Returns the string wrapped in ANSI escape codes.
 Each call parses existing ANSI through `limner.text`, applies the requested
 style to spans where that key is absent, and returns canonical ANSI. Nested
 calls therefore restore an outer style after an inner span instead of emitting
-a reset in the middle.
+a reset in the middle. Unknown or malformed specifications throw `ex-info` with
+`:limner.core/invalid-color`; non-string text throws
+`:limner.core/invalid-string`.
 
 ### `available-colors`
 `(available-colors)`
@@ -54,6 +56,8 @@ Creates a Truecolor (24-bit) color specification.
 
 **Parameters:**
 - `r`, `g`, `b`: Integers from 0-255.
+
+Values outside that range throw `ex-info` with `:limner.core/invalid-rgb`.
 
 **Returns:**
 - A color specification map `{:type :rgb ...}`.
@@ -80,6 +84,9 @@ Creates a 256-color palette specification.
 
 **Parameters:**
 - `n`: Integer from 0-255.
+
+Values outside that range throw `ex-info` with
+`:limner.core/invalid-color-index`.
 
 **Example:**
 ```clojure

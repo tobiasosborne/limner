@@ -17,6 +17,12 @@
 (defn- error-class [f]
   (:limner/error (try (f) (catch clojure.lang.ExceptionInfo e (ex-data e)))))
 
+(defn- thrown-data [f]
+  (try
+    (f)
+    nil
+    (catch clojure.lang.ExceptionInfo e (ex-data e))))
+
 (defn- thrown-class [f]
   (try
     (f)
@@ -53,6 +59,12 @@
     (is (= :limner.core/invalid-string
            (thrown-class #(core/color :red 42))))))
 
+(deftest core-color-rejects-malformed-structured-specs
+  (let [spec {:type :rgb :r 999 :g 0 :b 0}
+        data (thrown-data #(core/color spec "x"))]
+    (is (= :limner.core/invalid-color (:limner/error data)))
+    (is (= spec (:color-spec data)))))
+
 ;; ────────────────────── limner.borders ──────────────────────
 
 (deftest borders-reject-unknown-style
@@ -65,6 +77,18 @@
 (deftest borders-reject-invalid-title-pos
   (is (= :limner.borders/invalid-title-pos
          (thrown-class #(borders/draw-titled-box "t" ["x"] :title-pos :middle)))))
+
+(deftest borders-reject-malformed-custom-styles
+  (doseq [style [[]
+                 ["+" "+" "+" "+" "-"]
+                 {:top-left "+" :top-right "+"}]]
+    (let [data (thrown-data #(borders/get-border-chars style))]
+      (is (= :limner.borders/invalid-border-style (:limner/error data)))
+      (is (= style (:style data)))))
+  (is (= :limner.borders/invalid-title
+         (thrown-class #(borders/draw-titled-box nil ["x"]))))
+  (is (= :limner.borders/invalid-border-style
+         (thrown-class #(borders/get-border-chars 42)))))
 
 (deftest borders-reject-invalid-dimensions
   (is (= :limner.borders/invalid-dimension
@@ -108,13 +132,38 @@
   (is (= :limner.layout/invalid-grid
          (thrown-class #(layout/grid [] :columns 0)))))
 
+(deftest layout-rejects-invalid-spacing
+  (is (= :limner.layout/invalid-spacing
+         (thrown-class #(layout/stack [{:constraint (layout/fixed 1)}]
+                                      :spacing -1)))))
+
 ;; ────────────────────── limner.render buffer ──────────────────────
 
 (deftest render-rejects-non-strings
   (is (= :limner.render/invalid-string
          (thrown-class #(render/write-string-to-buffer (render/create-buffer 3 1) 0 0 42))))
   (is (= :limner.render/invalid-lines
-         (thrown-class #(render/write-lines-to-buffer (render/create-buffer 3 1) 0 0 ["ok" 7])))))
+         (thrown-class #(render/write-lines-to-buffer (render/create-buffer 3 1) 0 0 ["ok" 7]))))
+  (is (= :limner.render/invalid-lines
+         (thrown-class #(render/write-lines-to-buffer (render/create-buffer 3 1) 0 0 nil)))))
+
+(deftest render-validates-before-skipping-or-clearing-a-frame
+  (let [state (render/render-state 3 1 :clock (constantly 0))]
+    (is (= :limner.render/invalid-lines
+           (thrown-class #(render/render-frame state [42]))))
+    (let [output (java.io.StringWriter.)
+          data (binding [*out* output]
+                 (thrown-data #(render/force-render state [42])))]
+      (is (= :limner.render/invalid-lines (:limner/error data)))
+      (is (= "" (str output))))))
+
+(deftest render-error-classes-are-exact
+  (is (= :limner.render/invalid-dimension
+         (thrown-class #(render/create-buffer -1 1))))
+  (is (= :limner.render/invalid-callback
+         (thrown-class #(render/create-render-loop (atom {}) :render-fn nil))))
+  (is (= :limner.render/invalid-render-output
+         (thrown-class #(#'render/validate-render-output nil "test render")))))
 
 ;; ────────────────────── limner.text and limner.unicode ──────────────────────
 
@@ -149,6 +198,14 @@
   (is (= :limner.ansi/invalid-input (thrown-class #(ansi/tokenize nil))))
   (is (= :limner.ansi/invalid-input (thrown-class #(ansi/strip 42))))
   (is (= :limner.ansi.sgr/invalid-token (thrown-class #(sgr/parse {:type :text})))))
+
+(deftest remaining-foundation-error-classes-are-exact
+  (is (= :limner.text.style/invalid-input
+         (thrown-class #(style/value nil))))
+  (is (= :limner.text.style/invalid-span
+         (thrown-class #(style/append-span [] {:unknown "x"}))))
+  (is (= :limner.unicode.grapheme/invalid-reduce-fn
+         (thrown-class #(grapheme/reduce-clusters nil [] "x")))))
 
 ;; ────────────────────── no printing ──────────────────────
 

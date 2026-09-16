@@ -65,6 +65,10 @@ unallocated.
 Uses the content map's `:height` in a stack or `:width` in an `hsplit`,
 defaulting to zero. The value is not capped to the available space.
 
+Invalid constraint values throw `ex-info` with the ADR 0004 class
+`:limner.layout/invalid-dimension` or `:limner.layout/invalid-constraint`.
+`percent` rejects values outside 0..100 rather than clamping them.
+
 ## Layout Types
 
 Limner supports several layout strategies for arranging components.
@@ -151,6 +155,10 @@ Applies the layout specification to the given total dimensions, calculating abso
 
 **Returns:**
 - A sequence of positioned boxes ready for rendering.
+
+Negative dimensions, invalid spacing, empty component collections, malformed
+grids, and unknown layout types throw their documented `:limner.layout/*`
+error class; layout functions do not return an empty fallback.
 
 ## Utility Functions
 

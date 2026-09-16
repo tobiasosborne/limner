@@ -30,7 +30,10 @@ A map containing character sets for different styles.
 Creates a custom border style specification.
 
 **Parameters:**
-- `spec`: A map or vector defining characters for `[top-left top-right bottom-left bottom-right horizontal vertical]`.
+- `spec`: A six-string vector in the order `[top-left top-right bottom-left
+  bottom-right horizontal vertical]`, or a map containing those six named
+  string values. Incomplete or non-string custom styles throw `ex-info` with
+  `:limner.borders/invalid-border-style`.
 
 ## Drawing Functions
 
@@ -68,6 +71,10 @@ Draws a box with a title embedded in the top border.
 ```clojure
 (borders/draw-titled-box "Alert" ["System Critical"] :border-style :thick :title-pos :center)
 ```
+
+Unknown border keywords and `:title-pos` values throw their ADR 0004
+`:limner/error` classes; they do not select a default or return a placeholder.
+Non-string content and titles likewise throw instead of fabricating a box.
 
 Content width now uses the Unicode 17 `limner.text/width` path through
 `limner.core/visible-width`, but title positioning still uses string length.

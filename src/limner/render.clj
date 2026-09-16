@@ -158,16 +158,26 @@
                      :type (type s) :value s})))
   (write-units buffer x y (text/clusters s)))
 
+(defn- ensure-lines [lines]
+  (when-not (sequential? lines)
+    (throw (ex-info "Lines must be a sequential collection"
+                    {:limner/error :limner.render/invalid-lines
+                     :lines lines :type (type lines)})))
+  (doseq [[line-idx line] (map-indexed vector lines)]
+    (when-not (or (string? line) (vector? line))
+      (throw (ex-info (str "Line " line-idx " is not a string or styled-text vector: "
+                           (type line) " = " (pr-str line))
+                      {:limner/error :limner.render/invalid-lines
+                       :line-idx line-idx :type (type line) :value line}))))
+  lines)
+
 (defn write-lines-to-buffer
   "Write multiple lines to buffer starting at (x, y).
    lines: a collection of strings or styled-text values."
   [buffer x y lines]
+  (ensure-lines lines)
   (reduce
    (fn [buf [line-idx line]]
-     (when-not (or (string? line) (vector? line))
-       (throw (ex-info (str "Line " line-idx " is not a string: " (type line) " = " (pr-str line))
-                       {:limner/error :limner.render/invalid-lines
-                        :line-idx line-idx :type (type line) :value line})))
      (write-string-to-buffer buf x (+ y line-idx) line))
    buffer
    (map-indexed vector lines)))
@@ -505,6 +515,7 @@
    Invalid content throws (ADR 0004); the render loop reports the error and
    keeps the last good frame."
   [state content-lines]
+  (ensure-lines content-lines)
   (if (should-render? state)
     (let [updated-state (update-back-buffer state content-lines)
           _ (apply-diff (:front-buffer updated-state)
@@ -521,6 +532,7 @@
 
    Invalid content throws (ADR 0004)."
   [state content-lines]
+  (ensure-lines content-lines)
   (clear-screen)
   (let [clean-front (assoc state :front-buffer
                            (clear-buffer (:front-buffer state)))

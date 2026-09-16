@@ -126,7 +126,7 @@ caller believes an option is in effect that is not, so those throw.
 | `:limner.unicode.width/invalid-string` | `limner.unicode.width/string-width` | input is not a string |
 | `:limner.unicode.width.string/surrogate` | `limner.unicode.width.string` | input contains an unpaired surrogate |
 | `:limner.borders/invalid-lines` | `limner.borders/validate-lines` | input is not a collection, or holds a non-string |
-| `:limner.borders/invalid-border-style` | `limner.borders/validate-border-style` | style is not a keyword, vector, or map |
+| `:limner.borders/invalid-border-style` | `limner.borders/custom-style`, `get-border-chars` | style is neither a keyword nor a complete six-string vector/map |
 | `:limner.borders/unknown-border-style` | `limner.borders/get-border-chars` | keyword style is not in `border-styles` |
 | `:limner.borders/invalid-title` | `limner.borders/draw-titled-box` | title is not a string |
 | `:limner.borders/invalid-title-pos` | `limner.borders/draw-titled-box` | position is not `:left`, `:center`, or `:right` |
@@ -138,7 +138,7 @@ caller believes an option is in effect that is not, so those throw.
 | `:limner.layout/empty-components` | `limner.layout/stack`, `hsplit`, `grid` | component collection is empty |
 | `:limner.layout/invalid-grid` | `limner.layout/grid` | `:columns`/`:rows` missing or not positive integers |
 | `:limner.render/invalid-string` | `limner.render/write-string-to-buffer`, `cell` | content is not a string |
-| `:limner.render/invalid-lines` | `limner.render/write-lines-to-buffer` | a line is not a string |
+| `:limner.render/invalid-lines` | `limner.render/write-lines-to-buffer`, `render-frame`, `force-render` | lines are not sequential, or a line is not a string/styled value |
 | `:limner.render/invalid-render-output` | `limner.render/validate-render-output` | `render-fn` did not return a sequence of strings |
 | `:limner.render/invalid-callback` | `limner.render/create-render-loop` | `:render-fn`, `:on-frame`, or `:on-error` is not a function |
 | `:limner.render/invalid-dimension` | `limner.render/create-buffer` | a buffer dimension is not a non-negative integer |

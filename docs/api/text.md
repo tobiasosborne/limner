@@ -58,6 +58,10 @@ measuring operations supports `{:ambiguous-width 1}` (the default) or
 - `(lines value)` returns styled lines, preserving leading, internal, and
   trailing empty lines. Style carried across a newline appears on both lines.
 
+Invalid values, options, bounds, targets, fill clusters, styles, and spans
+throw `ex-info` with the corresponding `:limner.text/*` or
+`:limner.text.style/*` class listed in ADR 0004.
+
 Opaque controls and invisible clusters have width zero. Column operations
 preserve opaque spans but do not simulate cursor movement or tab stops.
 The measured two-runtime corpus and regression budgets are in

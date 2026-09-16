@@ -145,16 +145,20 @@
         {:bg (keyword (subs value 3))}
         {:fg color-spec}))
 
-    (and (map? color-spec) (= :rgb (:type color-spec)))
+    (and (map? color-spec) (= :rgb (:type color-spec))
+         (valid-rgb? (:r color-spec) (:g color-spec) (:b color-spec)))
     {:fg {:rgb [(:r color-spec) (:g color-spec) (:b color-spec)]}}
 
-    (and (map? color-spec) (= :bg-rgb (:type color-spec)))
+    (and (map? color-spec) (= :bg-rgb (:type color-spec))
+         (valid-rgb? (:r color-spec) (:g color-spec) (:b color-spec)))
     {:bg {:rgb [(:r color-spec) (:g color-spec) (:b color-spec)]}}
 
-    (and (map? color-spec) (= :256 (:type color-spec)))
+    (and (map? color-spec) (= :256 (:type color-spec))
+         (valid-256? (:code color-spec)))
     {:fg {:index (:code color-spec)}}
 
-    (and (map? color-spec) (= :bg-256 (:type color-spec)))
+    (and (map? color-spec) (= :bg-256 (:type color-spec))
+         (valid-256? (:code color-spec)))
     {:bg {:index (:code color-spec)}}
 
     :else
@@ -208,8 +212,7 @@
 (defn color?
   "Check if a value is a valid color specification"
   [spec]
-  (or (and (keyword? spec) (contains? basic-colors spec))
-      (and (map? spec) (#{:rgb :bg-rgb :256 :bg-256} (:type spec)))))
+  (boolean (color-spec->style spec)))
 
 ;; Common color presets
 

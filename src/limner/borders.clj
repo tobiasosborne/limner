@@ -25,15 +25,32 @@
                        :line line :index idx :type (type line)}))))
   lines)
 
+(def ^:private custom-style-keys
+  [:top-left :top-right :bottom-left :bottom-right :horizontal :vertical])
+
+(defn- valid-custom-style? [style]
+  (cond
+    (vector? style) (and (= 6 (count style)) (every? string? style))
+    (map? style) (every? #(string? (get style %)) custom-style-keys)
+    :else false))
+
+(defn- invalid-border-style! [style]
+  (throw (ex-info "Border style must be a known keyword or six-string vector/map"
+                  {:limner/error :limner.borders/invalid-border-style
+                   :style style :type (type style)
+                   :limner/hint (str "Use a predefined keyword or supply strings for "
+                                     (pr-str custom-style-keys))})))
+
 (defn- validate-border-style
-  "Validate that a border style exists or is valid custom style"
+  "Validate that a border style is a keyword or a complete custom style."
   [style]
-  (when-not (or (keyword? style)
-                (vector? style)
-                (map? style))
-    (throw (ex-info "Border style must be a keyword, vector, or map"
-                    {:limner/error :limner.borders/invalid-border-style
-                     :style style :type (type style)})))
+  (when-not (or (keyword? style) (valid-custom-style? style))
+    (invalid-border-style! style))
+  style)
+
+(defn- validate-custom-style [style]
+  (when-not (valid-custom-style? style)
+    (invalid-border-style! style))
   style)
 
 ;; ────────────────────── Border Styles ──────────────────────
@@ -53,6 +70,7 @@
    Takes a map with keys: :top-left :top-right :bottom-left :bottom-right :horizontal :vertical
    Or a vector: [top-left top-right bottom-left bottom-right horizontal vertical]"
   [spec]
+  (validate-custom-style spec)
   (if (vector? spec)
     spec
     [(:top-left spec)
@@ -81,10 +99,7 @@
 
     (or (vector? style) (map? style)) (custom-style style)
 
-    :else
-    (throw (ex-info "Border style must be a keyword, vector, or map"
-                    {:limner/error :limner.borders/invalid-border-style
-                     :style style :type (type style)}))))
+    :else (invalid-border-style! style)))
 
 (defn draw-horizontal
   "Draw horizontal border line with corners"
@@ -104,7 +119,7 @@
 
    Handles edge cases:
    - Empty lines: creates empty box
-   - Invalid border style: falls back to :single
+   - Invalid border style: throws ex-info
    - Non-string lines: throws ex-info
 
    Throws ex-info if lines is not a collection or contains non-strings."
@@ -130,7 +145,7 @@
 
    Handles edge cases:
    - Empty lines: creates box with title only
-   - Empty title: falls back to regular box
+   - Empty title: renders an empty title segment
    - Invalid title-pos: throws ex-info
    - Non-string lines: throws ex-info
 

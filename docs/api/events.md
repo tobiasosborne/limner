@@ -67,6 +67,8 @@ Adds a binding. Handler signature: `(fn [event state] -> new-state)`.
 `(dispatch-key registry event state)`
 
 Finds and executes the matching handler for an event.
+Handler exceptions propagate to the caller; `dispatch-key` does not print or
+return the old state as a fallback.
 
 ## Focus Management
 
@@ -111,6 +113,12 @@ Creates a complete async event processing system.
 - `:buffer-size`: Size of input buffer (default 100).
 - `:handler-timeout-ms`: Max time for a handler (default 5000ms).
 - `:batch-events?`: Whether to process rapid events in batches (default false).
+- `:on-error`, `:on-timeout`: Optional boundary callbacks. Handler errors and
+  timeouts are recorded in processor statistics and routed to these callbacks;
+  the processor does not print into the terminal.
+
+Missing `:state-atom`/`:event-queue` options or a non-function `:process-fn`
+throw `ex-info` with `:limner.events/invalid-argument`.
 
 **Returns:**
 A map with control functions:

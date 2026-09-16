@@ -116,7 +116,10 @@ instead.
 `(write-lines-to-buffer buffer x y lines)`
 
 Writes several lines starting at `(x, y)`. A non-string, non-styled line
-throws `ex-info` with `:limner.render/invalid-lines`.
+throws `ex-info` with `:limner.render/invalid-lines`; so does a value that is
+not a sequential collection. `render-frame` validates this input even when the
+frame-rate clock says no frame is due, and `force-render` validates it before
+clearing the terminal.
 
 ## Rendering Internals
 
