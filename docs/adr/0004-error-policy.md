@@ -134,6 +134,12 @@ caller believes an option is in effect that is not, so those throw.
 | `:limner.borders/invalid-title` | `limner.borders/draw-titled-box` | title is not a string |
 | `:limner.borders/invalid-title-pos` | `limner.borders/draw-titled-box` | position is not `:left`, `:center`, or `:right` |
 | `:limner.borders/invalid-dimension` | `limner.borders/indent-lines`, `nest-box`, `side-by-side` | a size is not an integer |
+| `:limner.table/invalid-rows` | `limner.table/table` | `rows` is not a sequential collection |
+| `:limner.table/empty-rows` | `limner.table/table` | `rows` is empty |
+| `:limner.table/invalid-row` | `limner.table/table` | a row is not a sequential collection of cells |
+| `:limner.table/ragged-rows` | `limner.table/table` | a row's cell count differs from the first row's |
+| `:limner.table/invalid-alignment` | `limner.table/table` | `:align` is unknown or has the wrong arity |
+| `:limner.table/invalid-padding` | `limner.table/table` | `:padding` is not a non-negative integer |
 | `:limner.layout/invalid-constraint` | `limner.layout/validate-constraint` | constraint is not a map, or its `:type` is unknown |
 | `:limner.layout/invalid-dimension` | `limner.layout` | a dimension is not a non-negative integer |
 | `:limner.layout/invalid-spacing` | `limner.layout` | spacing is not a non-negative number |

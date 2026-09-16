@@ -188,6 +188,7 @@ Output:
 | `limner.core` | ANSI colours and current display-width helpers | Core |
 | `limner.borders` | Boxes, titled boxes, borders, and shadows | Core |
 | `limner.layout` | Box geometry and stack, split, grid, and overlay layouts | Core |
+| `limner.table` | Column-correct bordered tables with per-column alignment | Core |
 | `limner.terminal` | Environment-based terminal capability detection | Core |
 | `limner.components.panel` | Panel state and rendering | Core |
 | `limner.components.list` | Selectable and filterable list state and rendering | Core |

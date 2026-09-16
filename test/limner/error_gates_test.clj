@@ -123,7 +123,8 @@
   #{"src/limner/borders.clj"
     "src/limner/borders/internal.clj"
     "src/limner/borders/effects.clj"
-    "src/limner/layout.clj"})
+    "src/limner/layout.clj"
+    "src/limner/table.clj"})
 
 (def ^:private banned-text-symbols
   "Symbols whose UTF-16 semantics must not appear in a component namespace."
@@ -149,7 +150,13 @@
    "Layout counts rows, cells, and flex items; text is measured by limner.text."
 
    ["src/limner/layout.clj" 'nth]
-   "Layout indexes numeric share vectors; text is measured by limner.text."})
+   "Layout indexes numeric share vectors; text is measured by limner.text."
+
+   ["src/limner/table.clj" 'count]
+   "Table counts rows and columns; cells are measured by limner.text."
+
+   ["src/limner/table.clj" 'nth]
+   "Table indexes its per-column width vector; cells use limner.text."})
 
 (defn- banned-use [form]
   (cond

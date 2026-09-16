@@ -99,6 +99,9 @@ The following functions changed their error behaviour:
   ADR 0005 grapheme-and-style cell model.
 - Added a test-only virtual terminal (`test/limner/vt.clj`) and golden and
   property tests for the render buffer, including REVIEW probes 6 and 6c.
+- Added `limner.table`, a column-correct bordered table with per-column
+  alignment that measures every cell through `limner.text`; the duplicated
+  `limner/table` now delegates to it and is deprecated (REVIEW F8, PLAN D4).
 
 ### Changed
 

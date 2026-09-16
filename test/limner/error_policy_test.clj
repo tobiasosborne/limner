@@ -9,6 +9,7 @@
             [limner.events :as events]
             [limner.layout :as layout]
             [limner.render :as render]
+            [limner.table :as table]
             [limner.text :as text]
             [limner.text.style :as style]
             [limner.unicode :as unicode]
@@ -213,6 +214,17 @@
          (thrown-class #(style/append-span [] {:unknown "x"}))))
   (is (= :limner.unicode.grapheme/invalid-reduce-fn
          (thrown-class #(grapheme/reduce-clusters nil [] "x")))))
+
+;; ────────────────────── limner.table ──────────────────────
+
+(deftest table-throws-on-invalid-input
+  (is (= :limner.table/empty-rows (thrown-class #(table/table []))))
+  (is (= :limner.table/invalid-row (thrown-class #(table/table ["cell"]))))
+  (is (= :limner.table/ragged-rows (thrown-class #(table/table [["a" "b"] ["c"]]))))
+  (is (= :limner.table/invalid-alignment (thrown-class #(table/table [["a"]] :align :up))))
+  (is (= :limner.table/invalid-alignment
+         (thrown-class #(table/table [["a" "b"]] :align [:left]))))
+  (is (= :limner.table/invalid-padding (thrown-class #(table/table [["a"]] :padding -1)))))
 
 ;; ────────────────────── no printing ──────────────────────
 

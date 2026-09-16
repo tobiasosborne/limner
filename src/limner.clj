@@ -1,12 +1,14 @@
 (ns limner
   "Deprecated compatibility namespace.
 
-  Use `limner.borders` for border drawing and `limner.syntax` for syntax
-  highlighting. A replacement `limner.table` namespace is planned and tracked
-  in beads; until it exists, `table` remains here for compatibility."
+  Use `limner.borders` for border drawing, `limner.syntax` for syntax
+  highlighting, and `limner.table` for tables. The duplicated `table` here
+  now delegates to `limner.table` and is deprecated; require the focused
+  namespace instead."
   (:require [clojure.string :as str]
+            [limner.borders :as borders]
             [limner.core :as core]
-            [limner.borders :as borders]))
+            [limner.table :as limner-table]))
 
 ;; ────────────────────── Syntax highlighting ──────────────────────
 (defn syntax [code lang]
@@ -28,20 +30,14 @@
     (str (str/join "\n" box-lines) "\n")))
 
 ;; ────────────────────── Table ──────────────────────
-(defn table [rows & {:keys [header?] :or {header? true}}]
-  (let [widths (for [c (range (count (first rows)))]
-                 (apply max (map #(core/visible-length (str (get % c ""))) rows)))
-        hline  (str "├─" (str/join "─┼─" (map #(apply str (repeat % "─")) widths)) "─┤")
-        rowstr (fn [r]
-                 (str "│ "
-                      (str/join " │ " (map-indexed #(format (str "%" (nth widths %) "s") (str %2)) r))
-                      " │"))]
-    (str "┌─" (str/join "─┬─" (map #(apply str (repeat % "─")) widths)) "─┐\n"
-         (rowstr (first rows))
-         (when header? (str "\n" hline))
-         (when (next rows)
-           (str "\n" (str/join "\n" (map rowstr (if header? (rest rows) rows)))))
-         "\n└─" (str/join "─┴─" (map #(apply str (repeat % "─")) widths)) "─┘\n")))
+(defn table
+  "DEPRECATED: use `limner.table/table`.
+
+  Kept for compatibility; delegates to `limner.table` with the same
+  rectangular-row validation and column-correct alignment."
+  {:deprecated "0.2.0"}
+  [rows & {:keys [header?] :or {header? true}}]
+  (limner-table/table rows :header? header?))
 
 ;; ────────────────────── Spinner ──────────────────────
 (def spinner-frames ["⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏"])
