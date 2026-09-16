@@ -212,8 +212,7 @@
 (deftest components-use-the-text-layer
   (testing "no component measures or slices user-visible text with UTF-16 tools"
     (doseq [{:keys [path form name]} (component-entries)
-            :let [use (some banned-use (walk form))]
-            :when use]
+            use (distinct (keep banned-use (walk form)))]
       (is (or (contains? allowed-component-uses [path name (symbol use)])
               (contains? allowed-component-uses [path (symbol use)]))
           (str path " / " name " uses " use "; route it through limner.text or "
